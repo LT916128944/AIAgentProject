@@ -1,0 +1,15 @@
+---
+description: 排障只检索一条历史或排障记录，不读整份 Skill。
+alwaysApply: true
+---
+
+# 历史解决方案
+
+触发：报错、不生效、写不成任务、失败、查不到、结果和说的不一致。
+
+1. 不要读 `ue-history-skill`、`ue-debug-skill` 或 `documents/历史解决方案.md`、`documents/排障条目.md` 的全文
+2. `search_ue_project(query=现象原文, top_k=1, where={"doc_kind":"history"})`
+3. 返回的 `title` 与现象对不上，再查一次 `where={"doc_kind":"debug"}`，仍是 `top_k=1`
+4. 仍对不上，就当没有现成方案，走域技能。域技能也只读用到的那一节
+
+不触发：纯问答、新功能、没有失败现象。

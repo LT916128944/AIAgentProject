@@ -1,0 +1,265 @@
+{
+  "_comment": "Hand-maintained. Records tool calls proven end-to-end against a live editor. Never overwritten by regenerate_index.ps1, unlike ue_mcp_index.json.",
+  "index_generated_at": "2026-09-21T13:49:40",
+  "engine_version": "5.8.2-56702186+++UE5+Release-5.8",
+  "transport": {
+    "steps": [
+      "tool_search(query='unreal editor actor transform location') 把 mcp__unreal_mcp 的三个 meta 工具暴露出来",
+      "call_tool(toolset_name=<工具集全名>, tool_name=<裸函数名>, arguments={...})"
+    ],
+    "meta_tools": ["list_toolsets", "describe_toolset", "call_tool"],
+    "notes": [
+      "tool_name 不带工具集前缀；工具集全名本身含点号（如 editor_toolset.toolsets.actor.ActorTools）",
+      "省略 toolset_name 时 tool_name 可传 '工具集全名.裸函数名'，按最后一个点切分",
+      "禁止用简称试探 toolset_name，失败一次即停并回查本文件或索引"
+    ]
+  },
+  "verified_at": "2026-09-21",
+  "verified": [
+    {
+      "toolset_name": "editor_toolset.toolsets.scene.SceneTools",
+      "tool_name": "find_actors",
+      "arguments": { "name": "Cube", "tag": "", "collision_channels": [] },
+      "required": ["name", "tag", "collision_channels"],
+      "return_shape": { "returnValue": [{ "refPath": "/Game/Maps/...:PersistentLevel.StaticMeshActor_2" }] },
+      "observed": "按 name 精确匹配找到 1 个 Actor",
+      "gotcha": "三个参数全部必填，即使为空也必须显式传"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.actor.ActorTools",
+      "tool_name": "get_actor_transform",
+      "arguments": { "actor": { "refPath": "<find_actors 返回的元素原样传回>" } },
+      "required": ["actor"],
+      "return_shape": {
+        "returnValue": {
+          "location": { "x": 0, "y": 0, "z": 0 },
+          "rotation": { "pitch": 0, "yaw": 0, "roll": 0 },
+          "scale": { "x": 1, "y": 1, "z": 1 }
+        }
+      },
+      "observed": "改动前后各读一次，坐标从 {1000,300,100} 变为 {1100,300,100}"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.actor.ActorTools",
+      "tool_name": "set_actor_transform",
+      "arguments": {
+        "actor": { "refPath": "<同上>" },
+        "xform": { "location": { "x": 1100, "y": 300, "z": 100 } },
+        "worldspace": true
+      },
+      "required": ["actor", "xform"],
+      "observed": "xform 中未给出的字段表示不修改，因此单传 location 即可平移",
+      "gotcha": "worldspace 默认 true；坐标是世界空间"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.programmatic.ProgrammaticToolset",
+      "tool_name": "execute_tool_script",
+      "arguments": { "script": "必须定义 run() 且返回 dict[str, Any]" },
+      "required": ["script"],
+      "observed": "上面三步就是在一次 execute_tool_script 里用 execute_tool(全名, json字符串) 串起来跑完的",
+      "sandbox": {
+        "importable_modules": ["json", "math", "datetime", "copy", "re", "time"],
+        "no_unreal": "沙箱内 import unreal 会失败",
+        "open": "被替换为只读版本，且路径必须位于工程目录或 Saved 目录内，无法写文件",
+        "result": "脚本只能通过返回值把数据交回调用方，故不适合搬运大块数据",
+        "strict_dict": "工具返回的 dict 是 _StrictDict，d.get(k, 默认值) 抛 TypeError: does not support a default value；改用 d[k] 包 try/except，或 json.loads 成普通 dict"
+      }
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.scene.SceneTools",
+      "tool_name": "save_actor",
+      "arguments": { "actor": { "refPath": "/Game/Maps/<Map>.<Map>:PersistentLevel.StaticMeshActor_2" } },
+      "required": ["actor"],
+      "observed": "对关卡内 Actor 调用必然抛错：\"'Cube' is not an external actor asset and cannot be saved individually. Save the level instead.\"",
+      "gotcha": "只对外部 Actor 资产（World Partition 外部打包 Actor）有效。用户说“保存一下”时，关卡内 Actor 一律改走 save_assets 保存关卡，不要用 save_actor 试错"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.scene.SceneTools",
+      "tool_name": "get_current_level",
+      "arguments": {},
+      "required": [],
+      "return_shape": { "returnValue": "/Game/Maps/L_NewTest" },
+      "observed": "无参数，返回当前加载关卡的资产路径，可直接作为 save_assets 的入参"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.asset.AssetTools",
+      "tool_name": "save_assets",
+      "arguments": { "asset_paths": ["/Game/Maps/L_NewTest"] },
+      "required": ["asset_paths"],
+      "return_shape": { "returnValue": true },
+      "observed": "保存关卡内 Actor 改动的正确姿势：get_current_level -> save_assets([level_path])，返回 true 即落盘成功",
+      "gotcha": "asset_paths 是字符串数组；传空列表会保存全部脏资产，非用户明确要求时不要用"
+    }
+    ,{
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "create",
+      "arguments": { "folder_path": "/Game", "asset_name": "BP_Gun", "asset_type": { "refPath": "/Script/Engine.Actor" } },
+      "required": ["folder_path", "asset_name", "asset_type"],
+      "return_shape": { "returnValue": { "refPath": "/Game/BP_Gun.BP_Gun" } },
+      "observed": "一次调用建出 Actor 蓝图，返回的 {refPath} 可直接当 add_component 的 owner、write_graph_dsl 的 blueprint 用",
+      "gotcha": "asset_type 是【类引用对象】不是字符串；BP 生成的类路径形如 /Game/X.X_C（SpawnActorfromClass 的 Class 引脚要用这个）"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.actor.ActorTools",
+      "tool_name": "add_component",
+      "arguments": { "owner": { "refPath": "/Game/BP_Gun.BP_Gun" }, "component_type": { "refPath": "/Script/Engine.StaticMeshComponent" }, "name": "GunMesh" },
+      "required": ["owner", "component_type", "name"],
+      "observed": "owner 可直接传蓝图资产；返回新组件引用。配套 ObjectTools.set_properties(instance=<组件>, values=JSON字符串) 设默认值，例如 '{\"StaticMesh\": \"/Engine/BasicShapes/Cube.Cube\"}'，实测生效",
+      "gotcha": "ActorTools.get_components 传蓝图资产会报 is not valid Actor（要传实例/CDO）；ProjectileMovementComponent 同样走 add_component + /Script/Engine.ProjectileMovementComponent"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "write_graph_dsl",
+      "arguments": { "graph": { "refPath": "/Game/BP_Gun.BP_Gun:EventGraph" }, "code": "(event EventBeginPlay (Development|PrintString \"hi\"))" },
+      "required": ["graph", "code"],
+      "observed": "写图并自动编译，成功返回 null；read_graph_dsl 可回读",
+      "gotcha": "顶层只能以 (event ...) / (fn ...) 开头。用输入节点如 (Input|MouseEvents|LeftMouseButton ...) 作根会直接失败：Top-level form must start with \"event\" or \"fn\" → 输入事件节点必须走 create_node + connect_pins"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "find_node_types",
+      "arguments": { "graph": { "refPath": "/Game/BP_Gun.BP_Gun:EventGraph" }, "type_id_filter": "LeftMouse", "context_pins": [] },
+      "required": ["graph", "type_id_filter", "context_pins"],
+      "return_shape": { "returnValue": ["Input|MouseEvents|LeftMouseButton", "Input|DebugEvents|MouseEvents|DebugKeyLeftMouseButton"] },
+      "observed": "type_id 子串匹配（大小写不敏感），命中即可直接喂给 create_node。左键事件 = Input|MouseEvents|LeftMouseButton；启用输入 = Input|EnableInput",
+      "gotcha": "type_id 是 CamelCase 无空格：过滤词写 \"left mouse\" / \"Enable Input\" 一律返回空数组，要写 LeftMouse / EnableInput / SpawnActor"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "get_node_infos",
+      "arguments": { "nodes": [{ "refPath": "/Game/BP_Gun.BP_Gun:EventGraph.K2Node_InputKey_2" }] },
+      "required": ["nodes"],
+      "return_shape": { "returnValue": [{ "type_id": "Input|MouseEvents|LeftMouseButton", "input_pins": [], "output_pins": [{ "name": "Pressed", "pin_id": { "direction": "EGPD_Output", "index_id": 0, "node": { "refPath": "..." } }, "connected_pins": [] }] }] },
+      "observed": "PinID 就在每个 pin 的 pin_id 里（direction/index_id/node），原样传给 connect_pins(output_pin=.., input_pin=..)。接线后该 pin 的 connected_pins 非空，可当一次复查",
+      "gotcha": "index_id 不在 pin 顶层，不要自己拼。一个脚本里 create_node -> get_node_infos -> connect_pins 可按引脚名自动建映射表全自动跑完（已实测 8 条连线一次成功）"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "set_pin_value / add_event",
+      "arguments": { "pin": { "direction": "EGPD_Input", "index_id": 1, "node": { "refPath": "..." } }, "value": "/Game/BP_Sphere.BP_Sphere_C" },
+      "required": ["pin", "value"],
+      "observed": "Class 引脚写 '/Game/BP_Sphere.BP_Sphere_C'；CollisionHandlingOverride 写 'AlwaysSpawn'；字符串引脚直接写文本。BeginPlay 用 add_event(blueprint, event_name=\"ReceiveBeginPlay\", position={x,y})",
+      "gotcha": "EnableInput 的 self 引脚会自动绑 self，不用连；编译成功时 compile_blueprint 返回 null（不抛错即通过）"
+    },
+    {
+      "toolset_name": "EditorToolset.EditorAppToolset",
+      "tool_name": "StartPIE / StopPIE / IsPIERunning",
+      "arguments": { "options": { "bSimulate": false, "playMode": "PlayMode_InViewPort", "warmupSeconds": 3 } },
+      "required": ["options"],
+      "observed": "options 内 bSimulate / playMode / warmupSeconds 三个字段全部必填；调用返回时 PostPIEStarted 已触发、BeginPlay 已执行，可直接读日志断言。StopPIE / IsPIERunning 无参数",
+      "gotcha": "已有 PIE 会话时 StartPIE 报错、无会话时 StopPIE 报错"
+    },
+    {
+      "toolset_name": "SlateInspectorToolset.SlateInspectorToolset",
+      "tool_name": "Snapshot / Click",
+      "arguments": { "ref": "", "maxDepth": 3 },
+      "required": ["ref"],
+      "return_shape": { "returnValue": "window \"...\" [pos=-3840,0 size=2560,1392] [ref=w1] 下挂 image [ref=i1]" },
+      "observed": "无人值守跑 PIE 输入的最小姿势：Snapshot(ref=\"\", maxDepth=3) 取窗口内整窗 image 的 ref → Click(ref=\"i1\", button=\"left\")。点击坐标落在视口，事件被 PIE 游戏视口接收，蓝图 Input|MouseEvents|LeftMouseButton 照常触发（已实测）",
+      "gotcha": "不必先 Windows 列表、也不必深层 Snapshot 精确定位视口控件（省一轮）。一次合成点击实测触发 2 次 Pressed，属注入特性，不是蓝图重复连线"
+    },
+    {
+      "toolset_name": "EditorToolset.LogsToolset",
+      "tool_name": "GetLogEntries",
+      "arguments": { "category": "", "maxEntries": 5, "pattern": "GUN_FIRED" },
+      "required": ["pattern"],
+      "return_shape": { "returnValue": ["[2026.09.21-06.45.12:967][684]LogBlueprintUserMessages: [BP_Gun_C_0] GUN_FIRED"] },
+      "observed": "PIE 验证主力：蓝图 PrintString 走 LogBlueprintUserMessages，category 传空 + pattern 正则即可断言整条事件链跑过",
+      "gotcha": "pattern 必填；category 必须显式传 \"\"，否则默认只查 LogsToolset 分类"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.scene.SceneTools",
+      "tool_name": "find_actors",
+      "arguments": { "name": "", "tag": "", "collision_channels": [], "actor_type": { "refPath": "/Game/BP_Sphere.BP_Sphere_C" } },
+      "required": ["name", "tag", "collision_channels"],
+      "return_shape": { "returnValue": [{ "refPath": "/Game/Maps/UEDPIE_0_L_NewTest.L_NewTest:PersistentLevel.BP_Sphere_C_0" }] },
+      "observed": "PIE 运行时能查到 UEDPIE_* 世界里的 Actor（编辑器世界查不到）→ 用它证明 SpawnActor 真的生成了对象，配合 get_actor_transform 还能看它是否在移动",
+      "gotcha": "actor_type 传 BP 类路径 /Game/X.X_C；name 传空字符串即可，但三个参数必须全部显式给出"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.actor.ActorTools",
+      "tool_name": "（不存在 Actor→Actor 挂接工具）",
+      "observed": "ActorTools 全部 17 个工具里没有任何 Actor 挂接能力，只有组件级 set_parent_component / get_parent_component。要把场景 Actor「挂在」另一个 Actor（如玩家 Pawn）身上，只能改蓝图：节点类型 id 为 Transformation|AttachActorToActor",
+      "gotcha": "AttachActorToActor 引脚：输入 execute/self/ParentActor/SocketName/LocationRule/RotationRule/ScaleRule/bWeldSimulatedBodies，输出 then/ReturnValue；self 自动绑 self。取 Pawn 用 Game|GetPlayerPawn（输入 PlayerIndex，输出 ReturnValue，纯函数无 exec）。调 set_parent_component 传 Pawn 的组件是行不通的路线，别试"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "create_node / set_pin_value / connect_pins（挂接链路）",
+      "arguments": { "graph": { "refPath": "/Game/BP_Gun.BP_Gun:EventGraph" }, "type_id": "Transformation|AttachActorToActor", "pos": { "x": -450, "y": 400 } },
+      "observed": "create_node 的 pos 传 {\"x\":..,\"y\":..}；向量引脚值传 UE ExportText 字符串 \"(X=60.000000,Y=35.000000,Z=-15.000000)\"；枚举引脚传 \"SnapToTarget\"/\"KeepWorld\"；整数传 \"0\"。挂接后 SetActorRelativeLocation（引脚 NewRelativeLocation，不是 NewLocation）设相对偏移，实测 Pawn=DefaultPawn 时偏移 (60,35,-15) 距离 71.1",
+      "gotcha": "致命坑：对已连线的输出 exec 引脚（如 EventBeginPlay 的 then）再 connect_pins 会顶掉原连线，编译后孤立节点被直接删除（本次就丢了 EnableInput/PrintString）。新增链路必须串接到链路末尾，不要并联到同一个 then；每改一段后 read_graph_dsl 复核旧节点还在不在"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.actor.ActorTools",
+      "tool_name": "get_components / get_parent_component（验证挂接）",
+      "arguments": { "actor": { "refPath": "<PIE 世界里的 BP_Gun>" } },
+      "observed": "PIE 里 get_components(gun) 取首个（根）组件 → get_parent_component 返回 \"...L_NewTest:PersistentLevel.DefaultPawn_0.CollisionComponent0\"，即已挂到玩家 Pawn；这是证明「跟随」最硬的证据，比只看距离可靠",
+      "gotcha": "find_actors 传 actor_type={refPath:\"/Script/Engine.Pawn\"} 在 PIE 世界可直接拿到 DefaultPawn_0；name=\"\" 会返回全关卡 Actor（L_NewTest 只有 15 个，含 BP_Gun_C_0/PlayerStart_1）。本项目没有自建 Pawn 蓝图，玩家 Pawn 就是引擎 DefaultPawn（球体）"
+    },
+    {
+      "toolset_name": "ConfigSettingsToolset.ConfigSettingsToolset",
+      "tool_name": "ListCategories / ListSections / GetSectionPropertyValues",
+      "arguments": { "containerName": "Project", "categoryName": "Engine", "sectionName": "Input", "propertyNames": ["AxisMappings", "ActionMappings", "DefaultPlayerInputClass", "DefaultInputComponentClass"] },
+      "required": ["containerName", "categoryName", "sectionName", "propertyNames"],
+      "return_shape": { "AxisMappings": "{\"AxisMappings\":[]}", "DefaultPlayerInputClass": "{\"DefaultPlayerInputClass\":{\"refPath\":\"/Script/EnhancedInput.EnhancedPlayerInput\"}}" },
+      "observed": "无需打开 Project Settings UI 即可读“活的”设置：ListCategories(Project) → [Editor,Engine,Game,Platforms,Plugins,Project]；Input 段在 Project/Engine/Input。本工程 AxisMappings/ActionMappings 都是空，默认类是 EnhancedPlayerInput/EnhancedInputComponent",
+      "gotcha": "ListCategories 用 containerName，ListSections 用 containerName+categoryName，GetSectionPropertyValues 四个参数全必填；属性值多以 JSON 字符串返回"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "list_events / list_functions / list_graphs",
+      "arguments": { "blueprint": { "refPath": "/Game/BP_Gun.BP_Gun" } },
+      "observed": "一次拿到蓝图全部事件（含 bIsImplemented）与图列表，用来判断“有没有键盘/输入事件”最快：list_graphs 返回 [{\"refPath\":\"/Game/BP_Gun.BP_Gun:EventGraph\"}, {...:UserConstructionScript}]。本项目 BP_Gun/BP_Sphere 只有 BeginPlay/Tick/Overlap/左键，无任何键盘或 InputAxis 事件",
+      "gotcha": "关卡蓝图不是 Blueprint 资产，list_graphs 传 \"/Game/Maps/X.X:LevelScriptBlueprint\" 直接报 “is not valid Blueprint”；关卡没有 Level BP 时 find_actors 也不会有 LevelScriptActor"
+    },
+    {
+      "toolset_name": "SlateInspectorToolset.SlateInspectorToolset",
+      "tool_name": "PressKey（不能按住键）",
+      "arguments": { "key": "w" },
+      "observed": "PIE 里对 DefaultPawn 连按 8 次 w / a / s / d，四次位置 delta 全为 0.00 —— down+up 落在同一 tick，轴值从未被 Tick 采样到，无法产生位移；只有 Click（如左键开火）能生效",
+      "gotcha": "常驻按住的键没有对应工具（无 KeyDown/KeyUp）。验证 WASD/移动类输入不能靠 PressKey，只能靠玩家手动操作或读设计侧（Input Mappings / 蓝图事件）"
+    },
+    {
+      "toolset_name": "（引擎事实）ADefaultPawn 的 WASD 来自引擎内建轴映射",
+      "tool_name": "DefaultPawn_MoveForward / DefaultPawn_MoveRight",
+      "observed": "Engine/Source/Runtime/Engine/Private/DefaultPawn.cpp: InitializeDefaultPawnInputBindings() 用 AddEngineDefinedAxisMapping 注册 \"DefaultPawn_MoveForward\"(W=+1,S=-1,Up/Down,Gamepad_LeftY) 与 \"DefaultPawn_MoveRight\"(A=-1,D=+1,Gamepad_LeftX)，MoveForward/MoveRight 用 Controller->GetControlRotation() 取方向 → A/D 是左右平移、不是转身，朝向只跟鼠标/手柄。本工程 PIE 玩家 Pawn 实测 class = /Script/Engine.DefaultPawn（球体），InputSettings 没覆盖这两个轴名，故四个键必然是四个不同方向",
+      "gotcha": "L_NewTest 布局：Plane(670,80,-40) scale(10,10,1)、Cube(100,200,300)、PlayerStart(500,30,52)，Pawn 生成处无遮挡；报“WASD 都朝一个方向”时先确认是不是别的工程/别处有 Enhanced Input 2D 轴缺 Negate/Swizzle 修饰器或 AddMovementInput 方向写死"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.actor.ActorTools",
+      "tool_name": "add_component（给蓝图加组件，一步挂父子）",
+      "arguments": { "owner": { "refPath": "/Game/BP_Pawn.Default__BP_Pawn_C:CollisionComponent0" }, "component_type": { "refPath": "/Script/Engine.SpringArmComponent" }, "name": "SpringArm" },
+      "return_shape": { "refPath": "/Game/BP_Pawn.BP_Pawn_C:SpringArm_GEN_VARIABLE" },
+      "observed": "owner 传 SceneComponent 的 refPath 时，新组件直接挂到该组件下（父子一步到位），返回路径形如 /Game/BP_X.BP_X_C:<Name>_GEN_VARIABLE；owner 传 SceneComponent 引用可继续作为父级（如 Camera 挂到刚建的 SpringArm 下）",
+      "gotcha": "owner 传 Blueprint 资产路径（/Game/BP_X.BP_X）会得到名为 Scene_GEN_VARIABLE 的空壳（CDO 上同名属性读出来是 None），不可用；蓝图里继承来的组件用 CDO 路径读：/Game/BP_X.Default__BP_X_C:CollisionComponent0 / :MeshComponent0 / :MovementComponent0（ADefaultPawn 成员名）"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.asset.AssetTools",
+      "tool_name": "exists / save_assets（PIE 运行期间必然失败）",
+      "arguments": { "path": "/Game/BP_Gun.BP_Gun", "asset_paths": ["/Game/BP_Gun.BP_Gun"] },
+      "observed": "PIE 运行中调用 exists / save_assets 一律报 “Asset does not exist: /Game/BP_Gun(.BP_Gun)”，StopPIE 后同一调用立刻返回 True；资产路径建议写全 (/Game/BP_X.BP_X)",
+      "gotcha": "任何写盘/存资产的动作先 StopPIE；另：create 已存在的资产会报 “create_asset: ... already exists”，一旦某个 execute_tool 报错，整个脚本的返回值会被错误信息顶掉（脚本仍继续执行），所以批量脚本里要么先 exists 判断，要么把易错调用放最后"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools",
+      "tool_name": "create_node + connect_pins（建 Tick 朝向跟随链，已跑通）",
+      "arguments": { "graph": { "refPath": "/Game/BP_Pawn.BP_Pawn:EventGraph" }, "type_id": "Math|Interpolation|RInterpTo" },
+      "observed": "可用 type_id：Transformation|GetVelocity、Math|Vector|VectorLength、Utilities|Operators|Greater(>)、Utilities|FlowControl|Branch、Math|Rotator|MakeRotfromX、Transformation|GetActorRotation、Math|Interpolation|RInterpTo、Transformation|SetActorRotation；事件用 add_event(event_name=\"ReceiveTick\")；引脚名：execute/then/else/Condition/A/B/ReturnValue/X/Current/Target/DeltaTime/InterpSpeed/NewRotation；整套 10 条连线一次脚本跑完，read_graph_dsl 回读为 (event EventTick (DeltaSeconds) (bind _returnvalue (Transformation|GetVelocity)) (if (> (Math|Vector|VectorLength _returnvalue) 1.0) (Transformation|SetActorRotation (Math|Interpolation|RInterpTo (Transformation|GetActorRotation) (Math|Rotator|MakeRotfromX _returnvalue) DeltaSeconds 8.0))))",
+      "gotcha": "find_nodes(graph,title=\"Set Actor Relative Location\") 可按显示标题定位节点；get_node_type_pins 返回的 pin 结构是 {value, connected_pins, pin_id{direction,index_id,node}, type_id, name}，连接时把 pin_id 原样传给 connect_pins"
+    },
+    {
+      "toolset_name": "ConfigSettingsToolset / WorldSettings（设默认 Pawn 的正确姿势）",
+      "tool_name": "globalDefaultGameMode + WorldSettings.DefaultGameMode",
+      "arguments": { "containerName": "Project", "categoryName": "Project", "sectionName": "Maps", "propertiesJson": "{\"globalDefaultGameMode\":{\"refPath\":\"/Game/BP_GameMode.BP_GameMode_C\"}}" },
+      "observed": "项目级默认 GameMode 在 Project/Project/Maps 段的 globalDefaultGameMode（对象 refPath，可读写并自动落盘 DefaultEngine.ini）；GameMode BP 的 DefaultPawnClass 用 ObjectTools.set_properties 写 CDO（/Game/BP_GameMode.Default__BP_GameMode_C）",
+      "gotcha": "关卡 WorldSettings 的 DefaultGameMode 覆盖优先！L_NewTest 原本就覆盖成 /Script/Engine.GameMode，所以只改项目设置 PIE 仍出 DefaultPawn；必须同时把 WorldSettings 改成 /Game/BP_GameMode.BP_GameMode_C（WorldSettings refPath：/Game/Maps/<Map>.<Map>:PersistentLevel.WorldSettings）。改完 BP 的 CDO 原生属性后要 compile_blueprint 再起 PIE，否则 PIE 可能仍用旧的类默认值（本次 DefaultPawnClass 首次不生效，编译+重设后生效）"
+    },
+    {
+      "toolset_name": "editor_toolset.toolsets.blueprint.BlueprintTools + ConfigSettingsToolset",
+      "tool_name": "InputAxis vs Tick+IsInputKeyDown（BP_Character WASD）",
+      "arguments": { "graph": { "refPath": "/Game/BP_Character.BP_Character:EventGraph" }, "type_id": "Pawn|Input|AddMovementInput" },
+      "observed": "工程 AxisMappings 原为空且 EnhancedPlayerInput；BP_Character EventGraph 仅空 BeginPlay/Tick/Overlap。create_node Input|AxisEvents|InputAxisMoveForward 后把 AxisValue 接到 AddMovementInput.ScaleValue 会 ICE：SetVariableOnPersistentFrame Axis Value。改走 EventTick→IsInputKeyDown(W/S/A/D)+SelectFloat+AddMovementInput(GetActorForward/RightVector) 可编译；DSL 为 Tick 内两次 AddMovementInput。SetSectionProperties Project/Engine/Input axisMappings=[{axisName,scale,key:{keyName}}] 可写入 DefaultInput.ini。get_node_infos 返回 dict 只有 input_pins/output_pins，禁 .get()。",
+      "gotcha": "execute_tool 抛错会中止整段脚本；get_node_infos 遇到无效 refPath 直接失败不进 Python except。Input Axis 事件 type_id 是 Input|AxisEvents|InputAxisMoveForward 不是 MoveForward。Utilities|Operators|Add 会解析成 FrameNumber+Int：按一次 WASD 后 Scale 不回 0，角色会朝后一直跑。正确姿势：Tick 用 Input|AxisValues|MoveForward / MoveRight（创建后 type_id 为 GetMoveForward/GetMoveRight）接到 AddMovementInput.ScaleValue；轴映射 W/S=MoveForward ±1、D/A=MoveRight ±1。IsInputKeyDown+SelectFloat 不要用。"
+    }
+  ]
+}

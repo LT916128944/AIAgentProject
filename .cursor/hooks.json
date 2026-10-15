@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "E:\\UEProject\\AIWork\\RAG\\ue-rag\\.venv\\Scripts\\python.exe .cursor/hooks/refuse_graph_writes.py",
+        "matcher": "call_mcp_tool",
+        "failClosed": false
+      }
+    ]
+  }
+}

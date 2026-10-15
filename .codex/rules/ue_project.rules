@@ -1,0 +1,37 @@
+# .codex/rules/ue_project.rules
+
+def rules():
+    return [
+        # 拒绝访问的目录/文件
+        deny(
+            paths = [
+                "**/Binaries/**",
+                "**/Intermediate/**",
+                "**/DerivedDataCache/**",
+                "**/Saved/**",
+                "**/.vs/**",
+                "**/.vscode/**",
+                "**/Build/**",
+            ],
+            reason = "禁止访问编译产物、缓存、IDE临时目录和UE二进制资产，防止浪费Token和干扰AI判断"
+        ),
+        
+        # 允许访问项目源代码
+        allow(
+            paths = [
+                "Source/**",
+                "Plugins/*/Source/**",
+                "Config/**",
+                "*.uproject"
+            ]
+        ),
+        
+        # 允许读取引擎源码 (本机实际安装路径: D:\UEEngline\UE_5.82\UE_5.8)
+        allow(
+            paths = [
+                "D:/UEEngline/UE_5.82/UE_5.8/Engine/Source/**",
+                "D:/UEEngline/UE_5.82/UE_5.8/Engine/Plugins/**/Source/**",
+                "D:/UEEngline/UE_5.82/UE_5.8/Engine/Plugins/**/Content/Python/**"
+            ]
+        )
+    ]
