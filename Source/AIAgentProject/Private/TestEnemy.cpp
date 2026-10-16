@@ -7,6 +7,12 @@
 ATestEnemy::ATestEnemy()
 {
     PrimaryActorTick.bCanEverTick = true;
+
+    // 没有场景根时 SetActorLocation 不会改变 GetActorLocation，巡逻位移读出来一直是 0。
+    USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+    Root->SetMobility(EComponentMobility::Movable);
+    SetRootComponent(Root);
+
     PatrolComponent = CreateDefaultSubobject<UTestEnemyPatrolComponent>(TEXT("Patrol"));
     PrintTestLog();
 }

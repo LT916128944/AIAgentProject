@@ -40,6 +40,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Test")
     float AttackInterval;
 
+    // 近战调用次数。只记次数，不播动画，不造成伤害
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Test")
+    int32 MeleeAttackCount;
+
     // 开始巡逻
     UFUNCTION(BlueprintCallable, Category = "Test")
     void StartPatrol();

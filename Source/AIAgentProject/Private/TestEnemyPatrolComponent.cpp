@@ -12,6 +12,7 @@ UTestEnemyPatrolComponent::UTestEnemyPatrolComponent()
     DetectRadius = 1200.f;
     AttackRange = 150.f;
     AttackInterval = 1.5f;
+    MeleeAttackCount = 0;
     PatrolAngle = 0.f;
     LastAttackTime = -1000.f;
     bChasing = false;
@@ -58,6 +59,7 @@ void UTestEnemyPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickTy
             if (Now - LastAttackTime >= AttackInterval)
             {
                 LastAttackTime = Now;
+                MeleeAttackCount++;
                 OnMeleeAttack();
             }
             return;
