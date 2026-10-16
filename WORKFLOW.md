@@ -1,6 +1,6 @@
 # 工作流使用说明
 
-给拉取本仓库的人。本文描述当前已经接上的用法和框架。2026-10-12 接上三条对话、裁判和检索。2026-10-13 把模型名收进配置，技能卡片补到 19 条，评测表开始合计 token，并放入巡逻敌人的 C++ 半边。同一天补上蓝图只读索引、角色上下文切片、一条写图 hook、失败分类文本表，以及成功后的历史和任务记录。2026-10-14 把「编译工程」「启动编辑器」和「能否拾取」拆成独立步骤：编译工程不要求唯一类，拾取只读裁决。2026-10-15 把「句子 → 动作」从正则升级成四层：L0 快路径（手写规则 + 已学句式）→ L1 理解器（一次模型调用选动作填槽位）→ L2 归地（代码解析路径、自动插创建前置扇）→ L3 学习回写，见 [`Plan/20261015-1705-自然语言理解前置与归地重构.md`](Plan/20261015-1705-自然语言理解前置与归地重构.md)。
+给拉取本仓库的人。本文描述当前已经接上的用法和框架。2026-10-12 接上三条对话、裁判和检索。2026-10-13 把模型名收进配置，技能卡片补到 19 条，评测表开始合计 token，并放入巡逻敌人的 C++ 半边。同一天补上蓝图只读索引、角色上下文切片、一条写图 hook、失败分类文本表，以及成功后的历史和任务记录。2026-10-14 把「编译工程」「启动编辑器」和「能否拾取」拆成独立步骤：编译工程不要求唯一类，拾取只读裁决。2026-10-15 把「句子 → 动作」从正则升级成四层：L0 快路径（手写规则 + 已学句式）→ L1 理解器（一次模型调用选动作填槽位）→ L2 归地（代码解析路径、自动插创建前置扇）→ L3 学习回写，见 [`Plan/20261015-1705-自然语言理解前置与归地重构.md`](Plan/20261015-1705-自然语言理解前置与归地重构.md)。2026-10-16 把每次模型调用的模型名、耗时、token、错误和响应里真正有的缓存字段记下来，并用同一三条任务对照了两个模型名。观测页由 `report.py` 从已有 trace 生成，四个 HTTP 路由在 `RAG/ue-rag/server/gateway.py`，不跑第二张图。同一天把 `cpp_build` 收成可取消的一次编译：开始时写下进程、开始时间和 300 秒截止，超时或停止都结束进程并记失败。任务书确认和 `s/c/r` 的选择写入事件 `confirm`。
 
 学习路线、岗位对标和 13 周计划在 [`周计划.md`](周计划.md)。那份文档是目标，不是当前操作手册。项目说明在 [`README.md`](README.md)。10 月 13 日第 8 节之后的缺口在 [`Plan/20261013-1310-第8节之后的缺口.md`](Plan/20261013-1310-第8节之后的缺口.md)。打包和部署只写在 [`Plan/20261013-1545-打包与部署.md`](Plan/20261013-1545-打包与部署.md)，还没执行。
 
@@ -16,11 +16,11 @@ Cursor 里按 `AGENTS.md` 说话的那条还在。人确认 `.cursor/memory/plan
 | 谁规划 | 检索一次后直接回答 | `plan_sequence` 的手写规则。正则能拆开的句子走这里，每一步同一张图（这一列不接理解器） | 分层规划（2026-10-15 起）：L0 快路径离线零模型——手写规则强命中（每一步都能落地才强；拆出任何暂停扇算弱命中）或 `agent/learned_routes.json` 同构句式，直接走 L2 归地；句里有「实现/逻辑/随机/功能/需求/行为」这类需求说法而没有任何改码扇接住时也算弱命中（181645 的教训：需求半句不许静默丢掉、测试不许替没实现的需求报成功）。L0 不中先过 L1 理解器（`agent/understand.py`，一次 `UE_LLM_MODEL` 调用，只从动作目录选动作、填槽位原始 token、推不出的写进 unresolved），产出经 `agent/intent.py` 验收后由 `agent/grounding.py` 归地：asset 槽位索引唯一命中直连，miss 且父类可推自动插「创建蓝图」前置扇，推不出只问一次 `r`。L1 说不出合法意图才回退老规划者（重试上限 1 次）。大任务先出任务书（超过 3 扇 / 新功能重构 / 理解器有 unresolved），人审通过才执行，范围窗口继承 L2 归地候选 |
 | 改工程 | 不改 | 不再每步输入 `y`。做不了或失败时暂停，可以补一次路径 | 每扇新的 `thread_id`，消息里只有这一扇的任务句。写编辑器或 `cpp_build` 的窗口过编辑器闸门串行，只读裁决并行 |
 | 验证 | 不编译 | 和以前的多 Agent 相同。模型不能自己宣布成功 | 集成不叫模型。某一扇失败只重试这一扇。任务书确认后代码追加 `integrate_verify` 跑矩阵验收 |
-| 记录 | 不写 trace | 每步写在 `data/runs/YYYYMMDD/`（按日期分目录，老 run 原平铺兼容读写）。图内部 trace 仍在 `data/traces/*.jsonl` | 同一目录，按窗口分节，带上依赖和 `{ok, summary}`。另有 `data/runs/YYYYMMDD/<run_id>.json` 机读状态、`data/events/<run_id>.jsonl` 事件流、`data/archive/<run_id>/` 归档 |
+| 记录 | 不写 trace。人在 `s/c/r` 里选择时，往 `data/events/<同一次 run id>.jsonl` 追加 `confirm` | 每步写在 `data/runs/YYYYMMDD/`（按日期分目录，老 run 原平铺兼容读写）。图内部 trace 仍在 `data/traces/*.jsonl` | 同一目录，按窗口分节，带上依赖和 `{ok, summary}`。另有 `data/runs/YYYYMMDD/<run_id>.json` 机读状态、`data/events/<run_id>.jsonl` 事件流、`data/archive/<run_id>/` 归档 |
 
-目标仍是 [`周计划.md`](周计划.md) 第 2.1 节那句验收：一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人。检索、改 C++、编译、读错误、再改、再测由闭环做。行为树、动画和受击表现由人在编辑器里绑。这句话还做不到。C++ 半边是 `UTestEnemyPatrolComponent` 和只负责挂载的 `ATestEnemy`：绕出生点巡逻，发现玩家后追击，近距离调用 `OnMeleeAttack`。三个事件都是 `BlueprintImplementableEvent`，图由人接。窄闭环已经能对三条固定任务做编译和断言。
+目标仍是 [`周计划.md`](周计划.md) 第 2.1 节那句验收：一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人。检索、改 C++、编译、读错误、再改、再测由闭环做。行为树、动画和受击表现由人在编辑器里绑。这句话还做不到。C++ 半边是 `UTestEnemyPatrolComponent` 和只负责挂载的 `ATestEnemy`：绕出生点巡逻，发现玩家后追击，近距离调用 `OnMeleeAttack`。三个事件都是 `BlueprintImplementableEvent`，图由人接。窄闭环已经能对三条固定任务做编译和断言。巡逻这条的读数画面在 `RAG/ue-rag/eval/reports/demo-c-patrol-20261016-124807.mp4`，文字来自 trace `demo-c-patrol-20261016-124807.jsonl`。
 
-`chat.py` 的 `answer`、`nodes.py` 的 `plan_node`、`supervise.py` 的 `_from_model` 都读 `config.UE_LLM_MODEL`。不设环境变量时是 `deepseek-chat`。不换供应商，不改 `base_url`。
+`chat.py` 的 `answer`、`nodes.py` 的 `plan_node`、`supervise.py` 的 `_from_model` 和理解器都经 `RAG/ue-rag/core/llm_call.py` 调用模型。模型名每次读 `UE_LLM_MODEL`，不设环境变量时是 `deepseek-chat`。不换供应商，不改 `base_url`。每次调用把模型名、耗时、prompt token、completion token、错误写进 `data/costs.jsonl`。响应里如果有 `prompt_cache_hit_tokens`、`prompt_cache_miss_tokens` 或 `cached_tokens`，一并写下；没有就空着，不估算。trace 里同一次 `plan` 也会带上这些字段。
 
 ## 一句多步
 
@@ -111,7 +111,7 @@ plan_sequence 手写规则
 | 层 | 现在怎么做 | 数据落在哪 |
 | --- | --- | --- |
 | 预处理（任务书） | 拆出超过 3 扇，或句子里说了「新功能/重构」，或理解器把半句扔进了 `unresolved`（2026-10-15：没着落的半句正是「尚未完成」清单该记的），先出任务书：任务范围、「尚未完成的全部主要内容」清单、估时区间、依赖、外部依赖，自动带总工作量和三行免责。人审门：确认 / `e` 命令就地编辑（改完立即写回同一对 .md+.json，`e help` 看写法，手改计进 `manual_edits`，确认时记「通过，附修改」）/ 写修改意见（按意见重出下一版，记审阅轮次）/ 放弃。审阅界面是 rich 表格（范围、交付、现状、依赖、窗口、估时），不是裸 markdown。窄任务走原快路径，不生成任务书。确认后的范围窗口按 id（或唯一动作）**原样继承**快路径候选，已解析的路径、父类、依赖一并保留，生成器不再重编动作/槽位；没归类的候选窗口照跑不丢（2026-10-15） | `data/briefs/<时间戳>-<slug>.md` + 同名 `.json` |
-| 观测（面板与事件流） | 菜单 3 默认 `--board`：顶上主代理区（指令、阶段、审阅轮次、「● 修改了文件」绿点），左下运行窗口区（`子代理 · 可续接`、旋转符 + 当前图节点、最近输出），右下完成区（`✓ N 已完成`，按 `E` 展开明细）。`--plain` 保留纯文本；面板不吞 stdout，echo 走订阅者，run 记录照常落盘 | `data/events/<run_id>.jsonl`，一行一事件：`run_start / intent / window_state / tool_call / judge / files_modified / window_result / integration / learned_route / index_stale / run_end`。`intent` 只存决策字段（动作名、unresolved、理解器 token），理解器被调用才写；`run_start` 的 `source` 新增 `understood`；`learned_route` 在整句集成成功且回写模板时写；`index_stale` 在本 run 真新建了蓝图资产时写，提示跑 `shortcuts\asset.bat` 重建索引（要关编辑器，由人执行，续接不重复提示）（2026-10-15） |
+| 观测（面板与事件流） | 菜单 3 默认 `--board`：顶上主代理区（指令、阶段、审阅轮次、「● 修改了文件」绿点），左下运行窗口区（`子代理 · 可续接`、旋转符 + 当前图节点、最近输出），右下完成区（`✓ N 已完成`，按 `E` 展开明细）。`--plain` 保留纯文本；面板不吞 stdout，echo 走订阅者，run 记录照常落盘 | `data/events/<run_id>.jsonl`，一行一事件：`run_start / intent / confirm / window_state / tool_call / judge / files_modified / window_result / integration / learned_route / index_stale / run_end`。`confirm` 在任务书确认或 `s/c/r` 选择时写，字段是时间、run、窗口、选项、补上的路径。`tool_call` 仍把工具失败原文放在 `note`。`intent` 只存决策字段（动作名、unresolved、理解器 token），理解器被调用才写；`run_start` 的 `source` 新增 `understood`；`learned_route` 在整句集成成功且回写模板时写；`index_stale` 在本 run 真新建了蓝图资产时写，提示跑 `shortcuts\asset.bat` 重建索引（要关编辑器，由人执行，续接不重复提示）（2026-10-15） |
 | 持久（可续接） | 每扇状态写穿机读 run 记录（窗口定义、thread_id、已发布工件、审阅轮次都在里面）。跑到一半 Ctrl+C 或断电，`python agent/run_windows.py --resume latest`（或具体 run id）：`done` 扇直接复用结果；中断扇用原 `thread_id` 从 checkpoint 续上下文；`paused` 且有动作的扇进人工裁决；`paused` 但没绑上动作的旧死桩扇直接跳过并写明——裁决不问它，`r` 也填不活，重拆那句话才会走新路由。「最近一次」不靠 mtime，是把平铺老文件和日期子目录里的 run 按 run_id 排出来取最新，菜单 4 和 `:resume latest` 都走这条（2026-10-15 目录改日期分层后补的）。启动时面板会提示可续接的 run | `data/runs/YYYYMMDD/<run_id>.json` |
 | 容错（快照与裁决） | 会写源码的窗口在编辑器闸门内先拍 `Source/AIAgentProject` 的字节快照，失败且任务无 `keep_source` 时还原；续接前先还原旧快照，半截改动不当前提。`paused` 窗口对齐单循环的 s/c/r，只问一次：`s 停止 / c 跳过 / r /Game/目录 或 r Public/类名.h`，裁决问题和输入提示同步进面板「最近输出」，不再只印在面板底下的裸终端里（2026-10-15）。环依赖开跑前报「环：W1→W2→W1」；悬空依赖报「未知窗口 id」，不再拖到集成段 | `data/snapshots/<run_id>/` |
 | 调度（只读并行） | 依赖全 `done` 的窗口进就绪集；只读裁决（`judge_pickup` / `check_pickup`）共享读闸并行，写场景/编译/PIE 独占写闸，读写互斥、写写互斥。规则窗口不再假链：按名字数据流连依赖（BP_TestActor 与 ATestActor 算同一目标），独立目标不虚连；规则拆出的测试窗口接在最近的编译/改码扇后面，上游没绑上动作、解析失败暂停时同样接上。后来补出来的 PIE 窗接在最后一扇后面，上游暂停时也不抢跑。成功扇按名字发布工件 `{ref, in_level}`，下游按槽位名订阅，放置→改名→裁决这类多物任务传得了 | 事件流里的起止时间戳可证重叠 |
@@ -131,7 +131,7 @@ REPL 里 `:quit` 退出，`E` 展开上一个 run 的每扇明细（状态、ok�
 
 拾取按槽位，不进 PIE，也不走 Automation。`A 能否被 B 拾取`、`B 拾取 A`、`被 B 拾取` 里，B 是拾取者，A 是物体。对不上就暂停，不猜角色。每个槽在 C++ 索引里要唯一。蓝图先用句中路径，否则用索引里父类和资产名都对得上的唯一蓝图，再没有才问一次 `r`。人给出的路径上如果还没有资产，放置前按这个类新建蓝图并编译，父类是 `/Script/AIAgentProject.TestActor` 这种去掉前缀的反射名，不改图。不按 C++ 类直接生成实例。两个槽都绑上之后，缺的实例才放进当前关卡：都缺时分别放在 `(0,0,100)` 和 `(50,0,100)` 并贴地；只缺一个时放在已有实例旁边 50 uu，不贴地，避免被地面拉开。不保存。只读裁决见上一节。已经点名的蓝图（例如 `BP_Gun`）和 C++ 类写在一句里时，先改 C++ 再编译那张蓝图。标签字符串即使以 Actor 结尾，对不上索引里的类就不算类名。加函数时允许改这个类的头文件和 cpp，先改再编译，不先把「当前已经能编过」当成做完。修编译错误仍是先看到失败再改。新逻辑拆成 Component、Subsystem 或 Controller，不堆进一个 Actor。表现钩子用 `BlueprintImplementableEvent`。
 
-带 `cpp_build` 的任务开始前，如果 `UnrealEditor.exe` 已在运行，会先关掉它再改源码、再编译。未保存的编辑器改动会丢失。编译前若编辑器又被拉起，会再关一次，避免游戏模块 DLL 被占用。
+带 `cpp_build` 的任务开始前，如果 `UnrealEditor.exe` 已在运行，会先关掉它再改源码、再编译。未保存的编辑器改动会丢失。编译前若编辑器又被拉起，会再关一次，避免游戏模块 DLL 被占用。闭环再打开编辑器时带 `-AutoDeclinePackageRecovery`：强制关掉不是正常退出，否则会弹出 Restore Packages，人没点之前 MCP 起不来。人手双击工程不受这个参数影响。
 
 源码改动留下且编译通过后，闭环调用 `shortcuts\cpp.bat nopause`：`export_cpp_metadata.py` 再 `ingest_assets.py`。手工要刷索引时双击 `shortcuts\cpp.bat`，它会暂停等你看结果。然后启动 `UnrealEditor.exe`。不 PIE，不保存。这次如果是我们把编辑器关掉的，任务结束也会再打开，避免编辑器一直关着。菜单 1 不关编辑器，也不启动编辑器。菜单 2 和菜单 3 在要编译 C++ 时会先关编辑器；句里写了启动编辑器、并且这一步通过后，才会再打开。
 
@@ -157,6 +157,7 @@ start.bat ─┬─ 普通对话 chat.py ─ retrieve ─ 回答
                     │                                                      │
                     └─ run_task.py ─ LangGraph ────────────────────────────┘
                               │
+                              ├─ llm_call.py    每次模型调用的用量。gateway 也走这里
                               ├─ plan_sequence  手写规则，然后 learned_routes.json
                               ├─ plan_windows   L0 规则强命中/已学句式 → L1 理解器 → L2 归地 → 老规划者兜底
                               ├─ intent/understand/grounding  意图验收、一次模型理解、asset 槽位归地
@@ -181,8 +182,9 @@ start.bat ─┬─ 普通对话 chat.py ─ retrieve ─ 回答
 | 裁判 | `core/judge.py` | `{ok, kind, summary, errors:[{file, line, message}]}` |
 | 图 | `agent/graph.py`、`agent/nodes.py`、`agent/roles.py` | 节点和边不变。`plan` 按任务种类换提示和工具。trace 记 `role` |
 | 监督者 | `agent/supervise.py`、`agent/plan_windows.py`、`agent/catalog.py`、`agent/intent.py`、`agent/understand.py`、`agent/grounding.py` | L0 手写规则（每步都落地才算强命中）和 learned_routes 先拆。弱命中/未命中过 L1 理解器（动作卡片 + 原句 + 3 条检索标题，1KB 上下），意图经 `validate_intent` 验收后 L2 归地：asset 槽位 `link_asset` 索引命中直连、类可推自动插创建前置扇、推不出问一次 `r`。L1 失败才叫老规划者（看不到工具原文），重试上限 1 次。整句集成成功且 unresolved 为空才回写模板（LRU 50 条） |
+| 网关 | `server/gateway.py` | 127.0.0.1:8010 上四个路由：`/api/health` 返回模型名和 MCP 是否可连；`/api/chat` 一次补全；`/api/structured` 包理解器；`/api/tool-call` 只转发契约里的六个工具。不拆窗口，不跑 LangGraph |
 | 任务 | `agent/task_schema.py`、`agent/run_task.py`、`agent/run_windows.py`、`agent/board.py`、`agent/brief.py`、`agent/ledger.py` | `--task` 跑固定 JSON。`--query` 仍是单循环。菜单 3 每扇一个新 `thread_id`（续接的中断扇用回原 id）。退出码 0/1/130。面板、任务书、事件流、机读 run 状态、快照、矩阵、台账都在这条线 |
-| 评测 | `eval/run_eval.py`、`eval/report.py`、`eval/check_routes.py` | 默认仍是三条任务。`report.py` 按任务合计 token，没有 usage 就留空。`check_routes.py` 只检查图的边。trace 在 `data/traces/`，已 gitignore |
+| 评测 | `eval/run_eval.py`、`eval/report.py`、`eval/check_routes.py` | 默认仍是三条任务。`report.py` 按任务合计 token，没有 usage 就留空；对目录再写 P50/P95 和一页 HTML。`check_routes.py` 检查图的边，也检查四个 HTTP 路由。trace 在 `data/traces/`，已 gitignore |
 
 ### 图怎么走
 
@@ -199,7 +201,7 @@ retrieve → plan → 有工具调用 → execute → plan
 
 build 前打转分档（2026-10-14 补）：编译还没跑过时，写码成功后连续 8 次只在 `read_source` 的，不判失败，`plan` 直接返回空工具调用，借现有路由进 `build`——写好的代码不会被快照还原掉；最近 12 次调用全是读/diff 且失败 ≥6 次且期间没有一次写码成功的，才把图干净结束，诊断写进 `last_error`。`apply_unified_diff` 的冲突报错会指出对不上的那一行和文件里的实际内容；`read_source` 一次最多 200 行；trace 和事件流的 `tool_call` 行带工具失败原文。
 
-当前检索是三层里的前两层。专有名词（类名、`/Game/`、`error C`、`BP_`）能唯一命中就停止。否则 BM25 与 bge 各取 20 条，用 RRF 合并。短名单重打分在 22 条题集上没有提高 Recall@5，热路径不加。两个向量模型收成 `rag_core._get_model` 一个。工具检索走同一漏斗的 `ue_tools`，卡片仍然不带 `input_schema`。技能卡片仍是 JSON，路由选出域之后只在该域的几张里挑最近的一张。
+当前检索是三层里的前两层。专有名词（类名、`/Game/`、`error C`、`BP_`）能唯一命中就停止。否则 BM25 与 bge 各取 20 条，用 RRF 合并。短名单重打分在原 22 题和扩到 30 题上都不高于路由加 BM25 的 Recall@5（四列都量过，重打分与混合都是 1.000），热路径不加。对照和没命中的题号在 `RAG/ue-rag/eval/reports/20261016-154827-retrieval.md`。BM25-only 单独一列只出现在这份评测里，日常检索不走它。两个向量模型收成 `rag_core._get_model` 一个。工具检索走同一漏斗的 `ue_tools`，卡片仍然不带 `input_schema`。技能卡片仍是 JSON，带 `triggers`、`tools`、`version`、`conflicts`，正文不进卡片。路由选出域之后只在该域的几张里挑最近的一张，plan 仍只带这一张的说明。选出域时再附上引擎 AgentSkill 的 `GeneratePrompt` 结果，最长 1200 字；没选出域就不附。
 
 `fix` 会先按错误原文检索一条 `source_type=ue_error`，没有命中就不编造历史。
 
@@ -221,13 +223,15 @@ build 前打转分档（2026-10-14 补）：编译还没跑过时，写码成功
 
 普通 MCP 调用超时 60 秒（`UE_MCP_CALL_TIMEOUT`）。裁判和编译等待 300 秒（`UE_MCP_TIMEOUT`）。
 
+`cpp_build` 开始时把进程号、开始时间和截止时间写进 `data/cpp_build_job.json`。截止沿用 `UE_MCP_TIMEOUT`（300 秒）。到点，或人按下停止，就结束这个进程树，裁判记失败，不把超时写成编译成功。停止是这次编译还在跑时的 Ctrl+C，或在 `RAG/ue-rag` 另开终端执行 `python -c "from core.build_job import request_stop; request_stop()"`。没有第二份任务队列。
+
 ### 裁判
 
 | kind | 做什么 | 怎样算通过 |
 | --- | --- | --- |
 | `editor_assert` | 读任务指定的工具。Actor 可先 `find_actors`，命中不是 1 个就停下并列出候选 | `expect.location` 的 x/y/z 与结果相差不超过 1 uu |
 | `blueprint_compile` | `BlueprintTools.compile_blueprint`，参数 `{blueprint:{refPath}}` | 客户端 `ok` 且 data 为 null 或空 |
-| `cpp_build` | 先关编辑器，再 `Build.bat AIAgentProjectEditor Win64 Development -Project=... -WaitMutex` | 退出码 0，且日志里没有 `error C` / `fatal error`。最多抽取 20 条。编的是编辑器要加载的模块 |
+| `cpp_build` | 先关编辑器，再 `Build.bat AIAgentProjectEditor Win64 Development -Project=... -WaitMutex`。开始时写 `data/cpp_build_job.json`。超时或停止会结束进程树 | 退出码 0，且日志里没有 `error C` / `fatal error`。最多抽取 20 条。编的是编辑器要加载的模块。超时和停止记失败，不看被杀掉之后的退出码 |
 | `automation` | 同进程内 `DiscoverTests` 一次，再 `RunTestsByFilter`，再 `GetTestResults` | JSON 里的 `failed` 为 0。解析不到失败数就是失败。单词 `passed` 不算成功 |
 | `skip` | 这一侧没有声明 | `ok: true`。observe 把 skip 当成通过 |
 
@@ -248,6 +252,10 @@ C++ 不让模型直接写文件。
 
 `inject_typo` 的任务在 `finally` 里把文件字节还原，不把试探错误留在工作区。本仓库目前没有 git，所以还原不用 `git checkout`。没有重置手段时，不宣称能和手工 Cursor 对照。旁路说明在 `RAG/ue-rag/eval/tasks/side/README.md`：可重复且不改文件或自带还原的任务 3 条，离 20 条还差 17 条。默认三条不变。
 
+## 回滚
+
+源码用 `data/snapshots` 还原。关卡默认不保存，重载即回到打开时的状态。编辑器 Undo 事务还没有接到写 Actor 的路径上。
+
 ### 检索里有什么
 
 | source_type | 来源 | 谁用 |
@@ -257,7 +265,7 @@ C++ 不让模型直接写文件。
 | `ue_bp_graph` | 编辑器开着时 `export_blueprint_graph.py` 只读 `list_graphs`、`list_variables`、`list_events`。只留路径、图名、变量名、事件名。2026-10-13 入库 4 条 | 同上，可 `where={"source_type":"ue_bp_graph"}` |
 | `ue_doc` | `export_docs.py` 切 `documents/*.md` 和 `.cursor/memory/conventions.md` 的二级标题 | 同上，可 `where={"source_type":"ue_doc"}` |
 | `ue_error` | 成功重试后的错误原文 sha1 | `fix` 先查一条 |
-| 技能卡片 | `export_skill_cards.py` 只读 `.cursor/skills/*/SKILL.md` 前 20 行的 name 和 description。2026-10-13 起是 19 条，含 `ue-manual-blueprint-skill`。每条仍只有 name、description、path | 不进向量库。plan 时只带一张卡片的说明 |
+| 技能卡片 | `export_skill_cards.py` 只读 `.cursor/skills/*/SKILL.md` 前 20 行的 name 和 description，再补 `triggers`、`tools`、`version`、`conflicts`。正文不进卡片。蓝图改图遇到 `UE_ALLOW_BLUEPRINT=false` 时，冲突产出是 `Plan/` 里的人工步骤。2026-10-13 起是 19 条，含 `ue-manual-blueprint-skill` | 不进向量库。plan 时只带一张卡片的说明。选出域后附 `data/agent_skill.json` 里的生成结果，最长 1200 字 |
 | 排障条目 | `documents/历史解决方案.md`（`doc_kind=history`）、`documents/排障条目.md`（`doc_kind=debug`） | 仍是 `ue_doc`。一次只取 `top_k=1`，标题对上才用 |
 
 `Plan/` 不入库。蓝图索引导出的是图名、变量名和事件名，不是整段 Graph DSL，也不等于改图。材质、UMG、动画蓝图、Niagara 不导出图。编辑器没开时这一层跳过，不编节点名。
@@ -298,7 +306,8 @@ E:\UEProject\AIWork\
     ├── eval\                三条任务、run_eval.py、report.py
     ├── pipelines\           导出与入库
     ├── scripts\             扫描工具、调用一个工具
-    └── data\                JSONL、技能卡片、Chroma、traces
+    ├── server\              检索 MCP、六工具契约、四个 HTTP 路由（8010，不跑图）
+    └── data\                JSONL、技能卡片、Chroma、traces、costs.jsonl
 ```
 
 | 目录 | 谁读 | 干什么 |
@@ -331,6 +340,8 @@ E:\UEProject\AIWork\
 ```
 
 仓库里没有提交这份配置。工具是 `search_ue_project`、`get_project_summary`。`search_ue_project` 可以多传一个 `where`。
+
+六个高层工具在旁边的 `RAG/ue-rag/server/contract_server.py`。`tools/list` 只有契约 `RAG/ue-rag/contract/tools.json` 里的六个，不返回官方 830 个，也不进规划者的动作目录。读场景的 `query_actor` 另在工程 `Content/Python/aiagent_query_actor_toolset.py` 注册成 Python Toolset，schema 由 `get_toolset_json_schema` 导出到 `RAG/ue-rag/contract/query_actor.toolset_schema.json`。编辑器下次启动时 `Content/Python/init_unreal.py` 会再注册一次。项目规矩另有一条 AgentSkill，资产在 `/Game/Skills/AIAgentProjectRules`，说明是 1 米 = 100 uu、编 `AIAgentProjectEditor`、路径不唯一就停、裁判不由模型宣布。`GetSkills` 带回的 instructions 写在 `RAG/ue-rag/data/agent_skill.json`。`project_context.json` 只有模块名、五个开关、模型名、源码根和当前关卡名。
 
 6. 第一次使用前入库。Embedding 是 `BAAI/bge-small-zh-v1.5`，镜像 `https://hf-mirror.com`。
 
@@ -435,9 +446,13 @@ python eval/run_eval.py
 python eval/report.py data/traces/eval-<timestamp>.jsonl
 python eval/check_routes.py
 python eval/retrieval_bench.py
+python eval/understand_probe.py
+python eval/model_compare.py
+python eval/report.py data/traces
+python server/gateway.py
 ```
 
-`report.py` 的列是 id、ok、retry、tools、elapsed、`prompt_tokens`、`completion_tokens`。token 按任务把每行里有的数加起来。没有 usage 就印空白，不估算，也不填 0。最后一行是 `tasks=` 和 `ok` 为 true 的个数。接着按失败行打分类计数：编译、测试、工具拒绝、MCP 连不上、超过重试、关卡预检、其他。对不上就进「其他」。参数如果是 `data/traces` 目录，每个 jsonl 一行：文件名、任务数、`ok` 数、两类 token 合计，然后再打一份合计分类。不算钱，不做网页。`observe` 行带 `judge_kind` 和截短的错误原文，分类靠这两项。`check_routes.py` 通过时打印 `routes ok`，退出码 0。它覆盖「编译通过之后测试失败回到 `fix`」，也覆盖 C++ 换行导出、快照标记、角色上下文、hook 拒绝和分类。不要为了制造失败去改游戏源码。
+`report.py` 的列是 id、ok、retry、tools、elapsed、`prompt_tokens`、`completion_tokens`。token 按任务把每行里有的数加起来。没有 usage 就印空白，不估算，也不填 0。最后一行是 `tasks=` 和 `ok` 为 true 的个数。接着按失败行打分类计数：编译、测试、工具拒绝、MCP 连不上、超过重试、关卡预检、其他。对不上就进「其他」。参数如果是 `data/traces` 目录，每个 jsonl 一行：文件名、任务数、`ok` 数、两类 token 合计，然后再打一份合计分类，以及耗时 P50/P95、平均 token、重试合计。路由计数只读 `data/events` 里的 `run_start`：`rules` 和 `learned` 算 L0 直接归地，`understood` 是理解器，`planner` 是老规划者。同时在 `eval/reports/` 写一页静态 HTML，打开就是这些数。缓存命中率只有 trace 里真有缓存字段时才填。不算钱，不另起采集服务。`observe` 行带 `judge_kind` 和截短的错误原文，分类靠这两项。`check_routes.py` 通过时打印 `routes ok`，退出码 0。它覆盖「编译通过之后测试失败回到 `fix`」，也覆盖 C++ 换行导出、快照标记、角色上下文、hook 拒绝、分类，以及四个 HTTP 路由和表外工具拒绝。不要为了制造失败去改游戏源码。
 
 `--query` 先经 `plan_sequence`。加函数或修编译错误时，写不出唯一的类就失败。编译工程不要求唯一类。拾取的两个槽各自解析，一个槽零条或多条才暂停。蓝图 `refPath` 和 Actor 对不上时不猜。`UE_ALLOW_BLUEPRINT=false` 时，改蓝图的一句话不进图，并在 `Plan/` 写下操作步骤。`true` 时改那张唯一的蓝图，编译失败重试到 `max_retries` 后停。评测仍用 `--task`，避免监督者把三条基线跑歪。`eval/tasks/cpp-fix-keep.json` 与 `cpp-typo` 相同，但 `keep_source: true` 时不还原源码；只有明确要留下修改时才跑。
 
@@ -463,7 +478,7 @@ Checkpoint 在 `RAG/ue-rag/agent_checkpoints.db`。每次任务用新的 `thread
 
 - 一句话还生成不出这个敌人。C++ 只有巡逻、追击和近战事件。行为树、动画、受击仍由人绑，三个 `BlueprintImplementableEvent` 还没有图
 - 蓝图自动改图只在 `UE_ALLOW_BLUEPRINT=true` 时尝试，不保证成功，次数用尽就停。材质、UMG、动画蓝图、Niagara 要各自的 `UE_ALLOW_*` 为 `true` 才放行写工具，缺省仍不改。本轮没有改三个近战事件的图
-- 交叉编码器重排、换 Embedding、Docker、评测网页
+- 交叉编码器重排、换 Embedding、Docker。观测页是 `report.py` 从已有 trace 写出的静态 HTML，不是常驻网站
 - 关卡和全量资产仍要关编辑器跑 `asset.bat`。编辑器开着时 `refresh_editor_readonly.py` 可以给已有 Actor 标上快照，并用 `find_assets` 补 `/Game` 里还没有的资产卡片。`find_actors` 只返回 `refPath`，不带回坐标，所以不会把快照数字改成当时的实时位置
 - 把 `--query` 设成 Cursor 里每句话的默认动作
 - UE Transaction 回滚

@@ -18,6 +18,8 @@
 ## 已沉淀
 
 - 长度：1 米 = 100uu。速度用 uu/s，1 米/秒 = 100。
+- Python Toolset 的 `Registration` 在 `toolset_registry.registration`，不在 `toolset_registry` 包根上。`@toolset_registry.tool_call` 才从包根导出。
+- AgentSkill 用 `ToolsetRegistry.AgentSkillToolset.CreateSkill` 建在 `/Game` 下。`GetSkills` 返回的 instructions 是 `GeneratePrompt` 的结果。保存时用资产路径，不带 `_C`。
 - Actor 没有可移动的场景根时，`SetActorLocation` 不改变 `GetActorLocation`。要巡逻位移就把根做成 `USceneComponent` 且 `Movable`。`BlueprintImplementableEvent` 的次数桩写在调用前，事件本身仍留给蓝图。
 - 键盘字母不是 Axis1D。`BindAxisKey` 只能绑鼠标轴、手柄轴；WASD 用 `BindKey` 的 Pressed / Released。`DefaultInput.ini` 里的 `MoveForward` / `MoveRight` 还要 `BindAxis`。两路相加后夹到 1，避免只通一路时不动，也避免两路都通时速度翻倍。场景根是 `USceneComponent` 时，`AddActorWorldOffset` 的扫掠用 false。鼠标看向用 `BindAxisKey(MouseX/MouseY)`，不要绑 ini 里不存在的 `Turn` / `LookUp`。`MouseY` 取反后再交给 pitch。
 - 本引擎 `UInputComponent::BindKey` 只有 4 参数成员函数指针重载，不接受 lambda。要区分按键时用 `void(FKey)`。
