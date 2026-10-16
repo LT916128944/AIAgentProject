@@ -1,417 +1,53 @@
-# UE5 × AI Agent 学习路线（终版）
+# AIAgentProject
 
-> 怎么把当前仓库跑起来、日常对话走哪条链路、离自动测试还差什么：见 [`WORKFLOW.md`](WORKFLOW.md)。
-> 本文是学习路线的权威文档：用户快照 + 岗位对标 + 13 周执行计划 + 岗位技能覆盖矩阵 + 验收标准。
-> **给外部 AI**：读完本文即可接手。请按「当前周次」继续输出知识点与任务，不要重复已完成内容；产出要求低 Token、可执行、可验证、带指标。
+UE 5.8 工程，给 AI Agent 一个可操作的编辑器和一份 C++ 游戏模块。检索、对话和执行闭环在旁边的 [ue-rag](https://github.com/LT916128944/ue-rag)。
 
-**一句话**：6 年 UE5/C++ 客户端工程师，正在转「AI × UE5 / AI Agent」，计划用 12+1 周做出可用于求职的「AI 操作 Unreal Editor」项目。
-
----
-
-## 1. 用户快照
-
-### 1.1 当前能力
-
-- 6 年 UE5 / C++ 客户端开发：UE4/UE5、VR/XR、大空间 VR、GameFeature、插件、Pak/Hotpatch、Jenkins/CI-CD、Pixel Streaming、NDisplay、MQTT、Python/Web。
-- 已能用 **UE 5.8 官方 Unreal MCP + Cursor/Codex** 驱动 Unreal Editor。
-- 已跑通 FastAPI 链路，后续作为 Agent 编排 / RAG / Memory / Runtime 服务层。
-- 已做出可运行的 UE 射击功能（BP_Gun / BP_Bullet），但单次大任务 Token 消耗过高，因此后续坚持「小任务 + Skill + 明确上下文 + 复用工具 + 验证闭环」。
-
-### 1.2 现有资产（外部 AI 请注意：这些已完成，不要重复教）
-
-- `AGENTS.md`：Token 节流铁律、工具路由表、求助与维护规范。
-- `.codex/skills/`：15 套 UE 域 Skill（actor / blueprint / material / niagara / animation / umg / sequencer / pcg / static-mesh / asset / object / debug / verify / programmatic / low-token）。
-- 配套脚手架脚本：`apply_index_block.ps1`、`check_skills.ps1`、`tool_params.ps1`、`mcp_bridge.ps1`、`regenerate_index.ps1`。
-- 事实库 `.codex/skills/ue-low-token-skill/references/ue_mcp_verified.json` 与索引 `ue_mcp_index.json`。
-- 工程内容：`Content/BP_Character`、`BP_GameMode`、`BP_Gun`、`BP_Sphere`、`Maps/L_NewTest`。
-
-### 1.3 职业目标
-
-不做纯 AI 算法，也不止做 VR。核心定位：
-
-> **AI × UE5 / AI × 3D / AI Agent / AI Coding Toolchain**
-
-三个月后要拿出的不是一个名词清单，而是一个真实可运行、可解释、可评测的项目：
-
-> **自然语言 → Agent → RAG/Context → Skill/MCP Tool → Unreal Editor → Build/Test → Error Observe → Fix/Retry**
-
-### 1.4 时间投入
-
-- 工作日约 5 小时/天，非工作日约 3 小时/天，约 **31 小时/周**。
-- 周期：**12 周主体 + 1 周缓冲/集中投递**，合计约 400 小时。
-
-### 1.5 成本与工具链现状
-
-| 项 | 现状 |
+| 文档 | 管什么 |
 | --- | --- |
-| 引擎 | UE 5.8 Launcher 版 |
-| MCP | 官方 Unreal MCP（8000 端口）+ All Toolsets，已启用 |
-| 服务层 | Python 3.12.10 + FastAPI（8010 端口） |
-| 客户端 | Cursor Pro 已连通 UE MCP；Claude Code 因 403/地区问题放弃 |
-| 成本策略 | Cursor 单干约 3 亿 token/$20；改用 VSCode + Codex + DeepSeek-Flash 混合方案，约 8.3 亿 token/$20 |
+| 本文 | 仓库里有什么、怎么和 ue-rag 放在一起 |
+| [`WORKFLOW.md`](WORKFLOW.md) | 已经接上的对话、检索、裁判和评测 |
+| [`周计划.md`](周计划.md) | 学习路线、岗位对标、13 周计划 |
+| [`AGENTS.md`](AGENTS.md) | Cursor 里的工具路由和 Token 节流 |
 
-**关键认识**：核心问题已从「AI 能否操作 UE」变成「如何低 Token、高稳定地开发 UE」。官方 MCP 已提供 Tool Search / Toolset / Actor / Blueprint / Material / Lighting / Automation 能力并支持自定义 C++/Python Toolset（官方标注 Experimental），**不需要重做一个通用 UE MCP**。
+## 目录怎么放
 
----
-
-## 2. 项目：UE AI Agent Workbench
-
-### 2.1 最终目标
-
-输入：「创建一个会巡逻、发现玩家后追击、近距离攻击的敌人。」
-
-Agent 自动完成：理解任务 → 读取项目上下文 → 检索已有 Character/AI/Blueprint/Asset → 制定计划 → 调用 Skill/MCP Tool → 创建或修改 UE 对象 → Build/Compile → PIE/Automation Test → 获取错误 → 自动修复 → 再次验证 → 输出结果与执行 Trace。
-
-### 2.2 必须展示的 6 项能力
-
-| 能力 | 必须 |
-| --- | --- |
-| LLM API / Model Router | ✅ |
-| Tool Calling / MCP / Skill | ✅ |
-| UE5 Editor 操作 | ✅ |
-| RAG / Context Engineering | ✅ |
-| Agent Loop / Retry / Error Recovery | ✅ |
-| Eval / Trace / Cost / Success Rate | ✅ |
-
-### 2.3 明确不做
-
-| 能力 | 处理 |
-| --- | --- |
-| Fine-tuning / LoRA / PyTorch 训练 | 不做 |
-| 自研基础模型 / 分布式训练 / CUDA | 不做 |
-| K8s 全栈平台 | 不做 |
-| 复杂 Multi-Agent 宇宙 | 只做最小可展示版本 |
-| A2A | 只理解概念 |
-| 同时掌握 Milvus/Qdrant/pgvector | 选一个即可 |
-
----
-
-## 3. 目标架构
+`start.bat` 按相对路径找上一级的 `RAG\ue-rag`。两个仓库克隆之后要保持这个位置：
 
 ```text
-                ┌──────────────────────┐
-                │  User / Web / CLI    │
-                └──────────┬───────────┘
-                           ▼
-                ┌──────────────────────┐
-                │ Agent Orchestrator   │
-                │ FastAPI + LangGraph  │
-                └──────────┬───────────┘
-             ┌─────────────┼─────────────┐
-             ▼             ▼             ▼
-      ┌──────────┐  ┌────────────┐  ┌────────────┐
-      │ Context  │  │ Skill/Tool │  │ ModelRouter│
-      │ RAG      │  │ Registry   │  │ Cost Ctrl  │
-      └────┬─────┘  └─────┬──────┘  └────────────┘
-           │              ▼
-     项目代码/资产     MCP Tool
-     Blueprint/Docs        │
-     Error/Memory          ▼
-                    ┌──────────────┐
-                    │ Unreal MCP   │
-                    │ UE 5.8 Editor│
-                    └──────┬───────┘
-                 ┌─────────┼─────────┐
-                 ▼         ▼         ▼
-              Modify    Build      Test
-                 └─────────┴─────────┘
-                           ▼
-                  Observe / Trace → Error/Success → Retry/Fix
+AIWork\
+├── AIAgentProject\          本仓库
+└── RAG\ue-rag\              https://github.com/LT916128944/ue-rag
 ```
 
-**架构原则**
+## 这个仓库里有什么
 
-- 官方 Unreal MCP 继续作为 UE 执行层；自定义 Toolset 只补「项目特有能力」：查项目结构、查 Blueprint、查 Actor、Build、Automation Test、读错误、项目规范检查。
-- Agent 层负责「为什么调用什么工具」，MCP 层负责「怎么执行」。
-- 不要把所有 Unreal MCP 工具一次性暴露给 Agent；优先高层、可验证、低参数复杂度的 Tool。
-- Tool 返回尽量结构化、短小、稳定；危险操作必须有人工确认与回滚路径。
+- `AIAgentProject.uproject`：引擎关联 5.8。已启用 `ModelContextProtocol`、`MCPClientToolset`、`AllToolsets`、`EditorToolset`。
+- `Source/AIAgentProject/`：游戏模块。巡逻敌人的 C++ 半边是 `ATestEnemy` 和 `UTestEnemyPatrolComponent`，发现玩家、追击、近战各留一个 `BlueprintImplementableEvent`，图由人接。旁边还有测试用的 Pawn、Character、GameMode、PlayerController。
+- `Content/`：测试关卡和蓝图，含 `BP_Gun`、`BP_Sphere`、`BP_Character`、`BP_GameMode`、`Maps/L_NewTest`。
+- `.cursor/`、`.codex/`：域技能和规则。域技能正文以 `.codex/skills` 为源，同步到 `.cursor/skills`。
+- `documents/`：功能设计。导出后进入 ue-rag 的检索。
+- `Plan/`：过程记录，不进入检索。
+- `start.bat`：转到 `RAG\ue-rag`，打开三条对话。
 
----
+## 准备
 
-## 4. 岗位对标（2026 招聘信息抽样）
+1. 安装 UE 5.8，打开 `AIAgentProject.uproject`。官方 Unreal MCP 需在 `http://127.0.0.1:8000/mcp`。编辑器没开时，写场景和改蓝图都会失败。
+2. 按 [ue-rag 的 README](https://github.com/LT916128944/ue-rag) 准备 Python 3.12 虚拟环境、依赖和 `.env`。至少填 `DEEPSEEK_API_KEY`。密钥不要提交。
+3. 第一次使用前的入库、工具索引和三条对话的差别，按 [`WORKFLOW.md`](WORKFLOW.md) 的「拉取之后先准备」。
 
-抽样来源：BOSS直聘 / 猎聘 / 智联 2026 年在招岗位。
+准备好之后双击 `start.bat`：
 
-### 4.1 三类岗位画像
+| 选项 | 行为 |
+| --- | --- |
+| 1 普通对话 | 检索后回答。不改工程，不编译 |
+| 2 单循环 | 一句话拆成步骤，每步走同一张图 |
+| 3 多窗口 | 分层规划后分扇执行，再集成 |
+| 4 续接 | 续接最近一个没跑完的多窗口 run |
 
-| 类型 | 岗位画像 | 重点要求 | 定位 |
-| --- | --- | --- | --- |
-| A | 游戏研发 AI Agent / UE5 | Agent 系统设计落地、接入 UE5 与研发工具链、Tool Calling / RAG / Prompt、效果评估（成功率/稳定性/节省时间）、Python/C++、UE 工具开发 | 主攻（但国内在招数量偏少） |
-| B | UE 编辑器工具 + AI | UE5 Editor Tool、C++/Python、Slate/UMG/Sequencer、AI 辅助生产工具、LLM/AIGC 接入 | 主攻（岗位数量可能多于 A，且 6 年 UE 经验直接命中） |
-| C | 通用 AI Agent / AI Coding / 工具链 | Python、LLM API、Agent Loop、RAG、MCP/Skill/Tool Calling、Context Engineering、Memory、Eval/Trace、FastAPI、Docker/CI | 第三方向（补 AI 工程能力，不走纯算法） |
+蓝图、材质、UMG、动画蓝图、Niagara 的连线默认不改。要改蓝图图时，在 ue-rag 的 `.env` 里把 `UE_ALLOW_BLUEPRINT` 设为 true。未要求则不保存关卡，也不 StartPIE。
 
-**结论**：市场上**没有**「UE5 + AI Agent」这个统一岗位名，实际分两条线。差异化叙事必须是「6 年 UE 经验 + AI 能操作 UE Editor 的 Demo」这个交叉点，且 Demo 要同时服务 A 与 B 两个叙事。
+## 现在做到哪
 
-### 4.2 招聘原文要点
+检索、改 C++、编译、读错误、再改、再测这条窄闭环已经能对固定任务做编译和断言。目标句「一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人」还做不到：C++ 半边在，行为树、动画和受击表现仍由人在编辑器里绑。
 
-- **AI Agent 产品研发工程师**：软件工程思维 + 精通 AI 编程工具。
-- **京东 AI Agent 开发工程师**：做 Skill Hub——技能的注册、发现、编排、版本管理与冲突解决；自然语言驱动的数据入口。
-- **猎聘 AI Agent 研发工程师（引擎架构）**：Agent 框架研发，含 DeepResearch / PlanExecutor / Multi-Agent / 通用 Agent。
-- **猎聘 高级 AI Agent 开发工程师**：RAG 技术栈（LangChain）；Agent 框架（AutoGen / FastGPT），能读懂并优化其源码。
-- **猎聘 上海 AI Agent 工程师**：熟悉 LangChain / LlamaIndex / Semantic Kernel 并了解优劣；后端工程能力（RESTful、异步编程）。
-
-### 4.3 能力缺口（相对现阶段）
-
-该表是路线开始时的缺口；当前操作和完成度见 WORKFLOW.md 与 `Plan/20261013-1248-UE-AI工作流进度与改进.md`。
-
-| 岗位高频要求 | 现状 | 补在哪里 |
-| --- | --- | --- |
-| RAG 全链路：切分 / Embedding / 向量库 / 混合检索 / Rerank / 检索评估 | 只有「接 RAG」的计划 | W5–W6 |
-| Agent 范式与多智能体 | 只有一个 Loop 的设想 | W7–W8 |
-| 工具调用规范：JSON Schema、MCP Server/Client、权限与沙箱 | 会用官方 MCP，缺设计与治理 | W2–W3 |
-| 上下文工程：预算、压缩、结构化输出、长会话防溢出 | 有 Token 意识，缺系统方法 | W3 |
-| 评估与可观测：成功率 / Token / 耗时 / 工具调用数 / Trace | 只有零散记录 | W4 + W10 |
-| 模型路由与成本：大小模型分工、缓存、本地模型 | 有成本压力，缺手段 | W1 + W10 |
-| 工程化与部署：FastAPI、异步、队列、容器化、CI | FastAPI 已跑通 | W9 + W12 |
-| UE 侧深度：Blueprint 程序化编辑、Asset Registry、Automation Test / Commandlet | 有 6 年经验，缺「给 Agent 用」的部分 | W2 + W5 + W9 |
-
----
-
-## 5. 岗位技能覆盖矩阵（面试全覆盖）
-
-左列即「面试会被问到的能力」，右列是把它变成证据的周次与交付物。**没有交付物的行不算覆盖。**
-
-| # | 能力 | 岗位要求度 | 覆盖周次 | 交付物 / 证据 |
-| --- | --- | --- | --- | --- |
-| 1 | LLM API 与多模型接入 | 必备 | W1 | LLM Gateway V1（换模型只改配置） |
-| 2 | Structured Output / JSON Schema | 必备 | W1–W2 | `/api/structured`、Tool Contract |
-| 3 | Function Calling / Tool Calling | 必备 | W2 | Tool Contract V1 |
-| 4 | MCP 概念 + 自定义 Toolset | 必备 | W2 | UE Toolset V1 |
-| 5 | MCP Server 对外暴露（供 Cursor/Claude 调用） | 加分 | W3 | 外部客户端可直接调用你的 UE 工具 |
-| 6 | Prompt / Context Engineering | 必备 | W3 | `project_context.json` + 上下文预算记录 |
-| 7 | Skill 设计 / Skill Registry（注册·发现·编排·版本·冲突） | 必备（京东 JD） | W3 | Skill Registry V1 |
-| 8 | 低 Token 工作流（少发现、少重复） | 必备 | W3–W4 | 对照 Token 下降数据 |
-| 9 | Prompt Caching / 缓存命中 | 加分 | W1 + W10 | 缓存命中率与单任务成本 |
-| 10 | RAG 全链路（切分 / Embedding / 向量库） | 必备 | W5 | UE Project RAG V1 |
-| 11 | UE 语料管道（二进制资产只能走 Editor 导出） | 差异化 | W5 | UE 元数据导出器 |
-| 12 | Hybrid Retrieval / BM25 / Rerank | 必备 | W6 | 四种检索策略对比 |
-| 13 | 检索评估 Recall@K / Hit Rate / Bad Case | 必备 | W6 | RAG Eval Dataset |
-| 14 | Agent Loop（Plan→Inspect→Execute→Build→Test→Observe→Fix→Retry） | 必备 | W3 最小版 / W7 完整版 | Agent Loop V1 / V2 |
-| 15 | LangGraph（State/Node/Edge/Checkpoint/Retry） | 必备 | W7 | 可恢复的 Agent 图 |
-| 16 | Memory（短期 / 长期项目 / 错误记忆） | 必备 | W8 | Agent Memory V1 |
-| 17 | Reflection / 失败分类 | 加分 | W8 | Failure Taxonomy |
-| 18 | Eval（任务集 + 成功率） | 必备 | W4 + W10 | Benchmark + Dashboard |
-| 19 | Trace / Observability | 必备 | W10 | 全链路 Trace |
-| 20 | Model Routing / Cost per Task | 必备 | W10 | 路由策略 + 成本曲线 |
-| 21 | 异步长任务（Build/PIE 分钟级） | 必备（实战） | W9 | background job + 轮询 + 超时取消 |
-| 22 | 权限控制 / 人工确认 / 回滚 | 必备 | W9 | HITL + UE Transaction 回滚 |
-| 23 | UE Automation Test / Commandlet / Build / 错误解析 | 必备 | W9 | UE Agent Validation Pipeline |
-| 24 | UE Editor 操作（Actor / Blueprint / Asset） | 必备 | W2 | UE Toolset V1 |
-| 25 | FastAPI / REST / Async | 必备 | W1 起贯穿 | Agent 服务层 |
-| 26 | Docker / CI-CD | 必备 | W12 | 容器化 + 流水线 |
-| 27 | LangChain / LlamaIndex / Semantic Kernel 认知（讲优劣） | P1 | W7 顺带 | 选型对比笔记 |
-| 28 | Ollama / vLLM 本地模型认知 | P1 | W10 顺带 | 选型与成本测算 |
-| 29 | 向量数据库选型 | P1 | W5 | 选定一个并给出理由 |
-| 30 | Multi-Agent | P2 | W11 | 最小可展示版本 |
-| 31 | Fine-tuning / LoRA / PyTorch / K8s / A2A | 不投入 | — | 明确放弃（能说清为什么不做） |
-
----
-
-## 6. 13 周执行计划
-
-### W1 — 模型能力验证 + LLM Gateway V1
-
-**先做（2 小时，前置验证）**：确认所选模型对 Function Calling 与 strict JSON Schema 的可靠度，以及 Prompt Caching 的命中表现。后面 12 周都建立在「模型能稳定输出结构化工具调用」这个假设上，早验证早避坑。
-
-学习：Chat API、system/user/tool 消息、结构化输出与 JSON Schema、Function Calling、Token 与上下文窗口、采样参数、模型路由思路、Prompt Caching 原理。
-
-实践：FastAPI 暴露 `/api/chat`、`/api/structured`、`/api/tool-call`、`/api/health`；多模型适配（**优先用现成库，不手写适配层**）；Cost Logger 记录模型、耗时、token、错误、缓存命中。
-
-交付：**LLM Gateway V1**——换模型只改配置，任一 Agent 不绑定单一模型。
-
-### W2 — Tool Contract + UE Toolset V1
-
-学习：Tool Schema / Description / Result / Error；MCP 核心概念（Server / Client / Tool、`tools/list`、`tools/call`、Resource / Prompt）；权限等级与超时设计。
-
-实践：直接对**真实 UE** 做 5~10 个高价值高层工具——`query_actor`、`query_blueprint`、`find_asset`、`build_project`、`run_automation_test`、`get_build_error`；每个工具带 input / output / error schema + permission level + timeout。不做 mock 版（mock 与真做是同一批工具，合并即可）。
-
-交付：**Tool Contract V1 + UE Toolset V1**。原则：不复制官方全部工具，只留 Agent 真正需要的。
-
-### W3 — Skill Registry + Context Engineering + 最小 Agent Loop
-
-学习：Context Budget、显式上下文、压缩与摘要、Prompt Template、Skill 路由。
-
-实践：把**已有的 15 套 Skill 与 AGENTS 路由接口化**成机器可读的 Skill Registry（name / description / triggers / 依赖工具 / 版本 / 冲突规则），不要从零重建；产出 `project_context.json`；做**最小 Agent Loop**（3 个工具、单轮 Plan→Act→Observe），打通「LLM 真的改动了 UE 并验证成功」这条端到端链路；把 UE Toolset 通过 MCP Server 暴露给外部客户端。
-
-交付：**Skill Registry V1 + 最小 Agent Loop（端到端跑通一次 UE 修改）+ 可被外部 AI 客户端调用的 MCP Server**。
-
-> 为什么闭环要提前到 W3：集成风险（工具返回值过大、错误信息不可解析、LLM 乱调工具）只有跑通端到端才暴露，拖到 W7 会推翻前面所有设计。
-
-### W4 — Benchmark 体系（含环境重置与对照基线）
-
-实践：建立 ≥20 个固定任务（Actor Transform / Property / Spawn、Blueprint 修改、Material 修改、Build、Test、Error Fix）；每次评测前用 Git commit / 关卡快照把工程**恢复到基线**；记录成功率、Total Token、Tool Calls、Latency、Retry Count；用**手工 Cursor 跑同一批任务**做对照。
-
-交付：**Benchmark V1 + 对照报告**（证明比裸 Prompt 更稳定、更省）。
-
-> 没有环境重置与对照基线，成功率这个指标不成立——这是面试官必问的点。
-
-### W5 — RAG 基础 + UE 语料管道
-
-学习：Chunking、Metadata、Embedding、Vector DB、Top-K、Similarity。
-
-语料：Project C++、Blueprint metadata、Asset metadata、UE 项目文档、项目规则、Error logs。
-
-实践：`.uasset` / `.umap` 是二进制，不能直接 chunk——先做 **UE 元数据导出器**（Asset Registry / Python Editor Scripting / MCP 工具），再完成 `ingest() → embed() → index() → retrieve()`。
-
-交付：**UE Project RAG V1 + UE 元数据导出器**（后者是区别于「通用知识库 Agent」的差异化产出，值得写进简历）。
-
-### W6 — Hybrid Retrieval + Rerank + RAG 评估
-
-学习：BM25、向量检索、混合检索、Rerank、Recall@K、Hit Rate、Bad Case 分析。
-
-实践：对比 Vector Only / BM25 Only / Hybrid / Hybrid + Rerank 四种策略；建 20~50 题的 RAG Eval Dataset（问题 + 期望 Asset / File / Class）。
-
-交付：**检索策略对比 + RAG Eval 报告（Recall@K、Hit Rate、Failure Cases）**。
-
-目标：证明「Agent 带检索上下文确实比裸 LLM 更好」，而不是把 RAG 做大。
-
-### W7 — LangGraph + Agent Loop V2
-
-学习：State、Node、Edge、Conditional Edge、Checkpoint、Retry。
-
-实践：把 W3 的最小 Loop 升级为完整链——Plan → Inspect → Execute → Build → Test → Observe → Fix → Retry；顺带了解 LangChain / LlamaIndex / Semantic Kernel 的定位与优劣。
-
-交付：**Agent Loop V2**：支持成功停止、Tool Error 重试、Build Error 修复、Test Failure 修复。
-
-### W8 — Memory + Error Recovery + Eval
-
-学习：Short-term Memory、Long-term Project Memory、Error Memory、Reflection、Failure Classification。
-
-实践：Memory 只保存项目规范、常见错误、常用 Asset、最近任务上下文，**不做人格记忆**。
-
-交付：**Agent Memory V1 + 失败分类表**。
-
-### W9 — UE Build / Automation / Validation + 写操作安全
-
-学习：Unreal Automation Test、Commandlet、Build Pipeline、Error Parsing、Exit Code、Artifact Validation；UE Transaction 回滚、资产 checkout 冲突。
-
-实践：把 `Build → Test → Read Error → Fix → Retry` 正式连起来；为分钟级任务加 **background job + 轮询 + 超时/取消**；为危险操作加 **人工确认点 + 回滚**。
-
-交付：**UE Agent Validation Pipeline（项目最重要的一层之一）**，并在这个阶段跑通最终 Demo 的第一遍。
-
-### W10 — Observability + Model Routing + Cost
-
-实践：记录完整 Trace：Request → Plan → Retrieval → Tool Call → Tool Result → Build → Test → Error → Retry。
-
-指标：Success Rate、Average Token、P50/P95 Latency、Tool Call Count、Retry Count、Error Rate、Cost per Task。
-
-模型路由：简单查询→小模型；工具选择→小/中模型；复杂规划→大模型；代码修复→大模型；总结→小模型。顺带了解 Ollama / vLLM 的本地部署选型。
-
-交付：**Agent Eval & Observability Dashboard**（哪怕先用简单 Web 页面，也必须能展示数据）。
-
-### W11 — 最终 Demo
-
-至少准备 3 个：
-
-- **Demo A｜Asset / Actor Agent**：「把场景中所有敌人出生点调整到指定范围，并验证位置。」
-- **Demo B｜Blueprint Agent**：「给这个敌人增加发现玩家后追击的逻辑。」
-- **Demo C｜完整 Agent**：「创建一个会巡逻、发现玩家后追击、近距离攻击的敌人。」
-
-完整链路：自然语言 → RAG → Plan → Tool Selection → UE MCP → Build → Test → Observe → Fix → Success。
-
-交付：Demo 视频、Architecture Diagram、README、Benchmark、Trace 截图。（Demo C 在 W9 已跑第一遍，本周只做打磨与录制。）
-
-### W12 — 工程化 + 简历 + 面试
-
-工程化：Docker、requirements/pyproject、Config、Logging、Error Handling、CI、README。
-
-简历措辞（不要写「基于大模型实现 UE Agent」）：
-
-> **设计并实现面向 Unreal Engine 5 的 AI Agent 工具链，基于 MCP/Skill 驱动 UE Editor 自动执行 Blueprint、Actor、Build 与 Automation Test，并结合 RAG、Context Engineering、Agent Loop 与 Error Recovery，实现从自然语言到可验证 UE 修改的闭环。**
-
-### W13 — 缓冲 + 集中求职
-
-不开新技术，只做：补 Bug、修 Demo、优化 README、优化简历、整理 Git 提交历史、发布视频、面试模拟、集中投递。
-
-**投递节奏**（不要等到 W12 才投）：W4 开始观察岗位并记录 JD 关键词 → W6 开始投部分匹配岗位 → W8 有 RAG + MCP + Agent Loop 后扩大投递 → W10 Demo 成型后集中投递。
-
----
-
-## 7. 每周 31 小时如何分配
-
-**工作日 5h**：1h 学新知识 / 3h 项目编码 / 1h Benchmark、文档、面试。
-
-**周末 3h**：0.5h 复盘 / 2h 项目 / 0.5h 整理 README、简历、面试题。
-
-提示：UE 编译与 PIE 有大量等待时间，可用来读文档或写周报。
-
-## 8. 每周必须留下可展示成果
-
-不要只记录「学了什么」，要回答四问：这周增加了什么能力？解决了什么问题？如何证明它工作？指标是多少？
-
-```text
-Week 4
-成果：UE Agent Low Token Workflow + Benchmark V1
-任务集：20
-成功率：XX%   平均 Token：XX   平均 Tool Calls：XX   对照基线：手工 Cursor XX%
-```
-
-## 9. 项目验收标准
-
-**Agent**：自然语言理解 / 任务分解 / Tool 调用 / MCP / RAG 上下文 / Retry / 依错误自动修复。
-
-**UE**：Actor 操作 / Blueprint 操作 / Asset 查询 / Build / Automation Test / 错误获取。
-
-**AI Engineering**：LLM API / Structured Output / Function Calling / MCP / RAG / LangGraph / Memory / Eval / Observability / Model Routing。
-
-**工程化**：FastAPI / Async / Docker / CI / Logging / README / Demo Video。
-
-**可信度**：评测可复现（环境重置）、有对照基线、每任务成本可解释。
-
-## 10. 面试题库
-
-1. 为什么用 MCP？MCP 和 Function Calling 的区别？
-2. Tool Schema 怎么设计？为什么不把所有 UE Tool 都暴露？
-3. 如何降低 Agent Token？（路由 / 缓存 / 上下文裁剪）
-4. Prompt Caching 在你的系统里怎么用、命中率多少？
-5. RAG 为什么需要 Hybrid Retrieval？Chunk 怎么切？
-6. UE 的 Blueprint 是二进制资产，你怎么做索引？
-7. 怎么评估 RAG？（Recall@K / Hit Rate / Bad Case）
-8. 怎么评估 Agent？（任务集 / 成功率 / 成本 / 延迟）
-9. Agent 如何避免无限循环？
-10. Build Error 怎么让 Agent 自动修复？
-11. Agent 如何做权限控制？危险操作怎么办？
-12. UE 侧操作失败后怎么回滚？（Transaction / 人工确认）
-13. 如何做模型路由？换模型怎么办？
-14. 如何证明你的 Agent 比普通 Cursor Prompt 更稳定？
-15. 同一个任务重复执行，怎么保证结果一致？（幂等 / 环境重置）
-16. Build / PIE 这种分钟级任务，Agent 怎么等？（异步 + 轮询 + 超时）
-17. UE MCP Tool 调用失败怎么处理？
-18. 为什么不做微调 / 不做 K8s？（体现取舍能力）
-
-## 11. 简历定位与投递
-
-主叙事：**6 年 UE5/C++ 工程经验 → AI Agent / AI Coding / UE Toolchain**（而不是「刚学 Python 和 RAG 的转行者」）。
-
-核心竞争力叠加：UE5/C++ + UE Editor/Toolchain + Unreal MCP + AI Agent + RAG/Context Engineering + Automation/Eval + AI Coding。
-
-同一条项目经历准备**两版措辞**：投 A 类（游戏 AI Agent）时强调 Agent 系统与评估；投 B 类（UE 编辑器工具）时强调 Editor 自动化与工具链。
-
-## 12. 明确放弃的路线
-
-不系统学 PyTorch、不做微调、不训模型、不深入 CUDA、不做纯算法项目、不花几周研究所有 Agent 框架、不学所有 MCP Tool、不做复杂 Multi-Agent 宇宙。
-
-原则：每学一个新技术都要回答——**它是否让最终 UE Agent Demo 更强、更稳定、更可解释、更容易求职？** 否则延后。
-
-## 13. 知识主线
-
-```text
-LLM API → Structured Output → Tool Calling → MCP/Skill → Context Engineering
-→ RAG → Agent Loop → Memory → Build/Test → Error Recovery
-→ Eval → Observability → Model Routing → Docker/CI → UE AI Agent 求职项目
-```
-
-## 14. 最终验收（三个月后要能说出的话）
-
-不是「我知道 RAG、LangChain、MCP、Agent 是什么」，而是：
-
-> **我做过一个真正能操作 Unreal Engine 5 的 Agent，并且我能解释 Tool、Context、RAG、Agent Loop、Error Recovery、Eval、Observability、Cost Control 为什么这样设计。**
-
-## 15. 给外部 AI 的接续说明
-
-学习目标仍以本文为准；日常操作以 WORKFLOW.md 为准；Cursor 工具纪律以 AGENTS.md 为准。
-
-- 本文是唯一权威文档，按「当前周次」继续输出知识点与任务，不重复已完成内容。
-- 时间预算约 31 小时/周，任务请按天可完成粒度拆分。
-- 所有产出必须可验证、可展示、带指标；优先复用已有 Skill / AGENTS 路由，不要重建。
-- 若涉及 UE 操作，优先用官方 Unreal MCP 与已有 Toolset，不新造通用 MCP。
+细节和完成度以 [`WORKFLOW.md`](WORKFLOW.md) 为准，不要用 [`周计划.md`](周计划.md) 第 4.3 节那张开工时的缺口表判断当前仓库。
