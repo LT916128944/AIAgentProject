@@ -9,9 +9,10 @@ if _here not in sys.path:
     sys.path.append(_here)
 
 from aiagent_query_actor_toolset import AIAgentQueryActorToolset
+from aiagent_material_toolset import AIAgentMaterialToolset
 
-_registration = Registration([AIAgentQueryActorToolset])
+_registration = Registration([AIAgentQueryActorToolset, AIAgentMaterialToolset])
 if _registration.register():
-    unreal.log("AIAgentQueryActorToolset registered")
+    unreal.log("AIAgentQueryActorToolset / AIAgentMaterialToolset registered")
 else:
-    unreal.log_error("AIAgentQueryActorToolset register failed")
+    unreal.log_error("AIAgentQueryActorToolset / AIAgentMaterialToolset register failed")

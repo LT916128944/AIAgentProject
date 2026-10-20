@@ -5,15 +5,14 @@ alwaysApply: true
 
 # UE 项目任务门禁
 
-触发：要改 UE 项目（C++ / 蓝图 / 关卡或资产经编辑器 MCP）。例如新建 Pawn、加 Subsystem、改蓝图 Graph。蓝图连线先看 `UE_ALLOW_BLUEPRINT`。`false` 只写 `Plan/` 操作步骤，不改图。`true` 才走 MCP，失败到 `max_retries` 停止，并仍先落 Plan。
+触发：要改 UE 项目（C++ / 蓝图 / 关卡或资产经编辑器 MCP）。蓝图连线先看 `UE_ALLOW_BLUEPRINT`。
 
 1. 先读并遵守 `.cursor/skills/ue-cpp-plan-skill/SKILL.md`
-2. **将改 UE 项目时**先把 Plan 追加到 `.cursor/memory/plans/YYYY-MM-DD.md`，未经确认不写 `.h` / `.cpp` / `Build.cs`、不改蓝图
-3. **UE 项目改动完成后**追加 `.cursor/memory/任务记录/YYYY-MM-DD.md`（格式见 Skill；只碰当天）。可复用经验追加到 `.cursor/memory/conventions.md`
-4. 无确切类名/路径 → RAG 先行。有路径 → 只读范式文件
-5. 排障先 `search_ue_project` 一条 `doc_kind=history`，对不上再查 `doc_kind=debug`。不要读整份历史或 debug Skill。没有对应现象再走域 Skill，**改完仍要按本 Skill 落盘**
-
-落盘前只读 `.cursor/memory/conventions.md`（若有）和当天文件末尾。禁止扫其他日期。
+2. **将改 UE 项目时**先把 Plan 追加到 `.cursor/memory/plans/YYYY-MM-DD.md`，未确认不写 `.h` / `.cpp` / `Build.cs`、不改蓝图
+3. **UE 项目改动完成后**追加 `.cursor/memory/任务记录/YYYY-MM-DD.md`（只碰当天）。可复用经验进 `conventions.md`
+4. 无确切类名/路径 → RAG 先行；有路径 → 只读范式文件
+5. 排障按 `ue-history.mdc`。落盘前只读 `conventions.md`（若有）和当天文件末尾，禁止扫其他日期
+6. 本升级文件的预授权只覆盖该文件列出的路径；不改 UE 工程时不写 Plan
 
 不落盘：改 Cursor Rule/Skill、分析 `documents/`、问答、没动 UE 项目的讨论。
-单行修 bug / 用户说「直接改」：可跳过大 Plan，但只要改了 UE 项目仍追加任务记录。
+单行修 bug / 用户说「直接改」：可跳过大 Plan，但改了 UE 工程仍写当天任务记录。
