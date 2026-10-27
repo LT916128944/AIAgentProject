@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-23
+last_updated: 2026-10-27
 status: active
 owner: 侑
 ---
@@ -14,16 +14,16 @@ owner: 侑
 - `run_multi.py`：单循环，与菜单 3 同一条 `plan_windows` 链，每步走同一张 LangGraph
 - `run_windows.py`：多窗口，规划者 / 任务书 / 快路径，每扇一次 `run_task`（只读条目可并行过编辑器闸门），配 `board.py` 面板、`brief.py` 任务书 + 人审门、`ledger.py` 台账
 
-Cursor 对话仍按根目录 `AGENTS.md` 说话，编辑器操作走 `scan_mcp_tools.py` + `call_mcp_tool.py`，与闭环汇合在同一个 `editor_exec.py`。
+Cursor 对话仍按根目录 `AGENTS.md` 说话。`UE_EDITOR_BACKEND=official` 时走 `scan_mcp_tools.py` + `call_mcp_tool.py`，汇合在 `core/editor_exec.py`（8000）。`monolith` 时走 `backends/monolith.py` 的 discover / describe / exec（9316）。`backends/select.py` 一次运行只锁一个，选错入口拒绝，不回退另一边。本仓库 `.env.example` 正在用的是 `monolith`。
 
-- DeepSeek Harness（可选外壳，2026-10-23 起）：DSH 打开工作区 `E:\UEProject\AIWork`，只经 9 个 `mcp__uerag__*` 汇合到同一份检索库与同一个 `editor_exec.py`；配置模板 `RAG/ue-rag/dsh/cordis.patch.yml`，说明 `RAG/ue-rag/dsh/README.md`。写策略只读 `RAG/ue-rag/data/dsh/session_task.json`，完成证据只认 `read_contract` + `verify`。
+- DeepSeek Harness（可选外壳）：DSH 打开工作区 `E:\UEProject\AIWork`，仍是 9 个 `mcp__uerag__*`。扫描、取 schema、执行在 `server/dsh_bridge.py` 转到已锁定的后端。配置模板 `RAG/ue-rag/dsh/cordis.patch.yml`，说明 `RAG/ue-rag/dsh/README.md`。写策略只读 `RAG/ue-rag/data/dsh/session_task.json`，完成证据只认 `read_contract` + `verify`。
 
 ## 当前架构事实
 
 - **一张 LangGraph**。节点顺序 `retrieve → plan → execute → build → test → observe → fix`，边由 `RAG/ue-rag/eval/check_routes.py` 固定，边没有为任何新功能增删过。
-- **`RAG/ue-rag/core/editor_exec.py` 是唯一编辑器出口**。Cursor CLI 和 LangGraph 都走它，协议仍是 `ue_mcp_client.call_ue_tool`。
+- **一次运行一个编辑器出口**。`official` 是 `core/editor_exec.py`。`monolith` 是 `backends/monolith.py`。裁判在 `core/judge.py` 按已锁定的后端分叉。协议仍是 MCP HTTP。
 - **网关 `server/gateway.py` 在 127.0.0.1:8010**，四个路由：`/api/health`、`/api/chat`（一次补全）、`/api/structured`（理解器）、`/api/tool-call`（只转发契约里的六个工具）。网关不拆窗口、不跑 LangGraph。
-- **思考在 L1，归地和裁判在代码**：句子 → 动作是 L0 手写规则 / 已学句式 → L1 理解器（一次模型调用选动作填槽位）→ L2 归地（代码解析路径，asset 槽位走索引）→ L3 学习回写。`build` / `test` 的裁判 `core/judge.py` 不带 LLM，成功与否不由模型宣布。
+- **思考在 L1，归地和裁判在代码**：句子 → 动作是 L0 手写规则 / 已学句式 → L1 理解器（一次模型调用选动作填槽位）→ L2 归地（代码解析路径，asset 槽位走索引）→ L3 学习回写。只读诊断句由 `agent/diagnose.py` 归到唯一的 Automation 过滤器，收成已有的 `run_automation_test`，不扩动作表。`backend=monolith` 时蓝图类动作对同一目标最多修 3 次。`build` / `test` 的裁判 `core/judge.py` 不带 LLM，成功与否不由模型宣布。
 - **检索不进规划者**：`retrieve` 只为路由与句子服务；专有名词唯一命中即停，否则 BM25 + bge RRF 合并，热路径无重排。
 - **决策落盘**：每次模型调用记 `data/costs.jsonl`；事件流 `context_slice` 记 `user / judge_fail / tool_kept / tool_dropped` 四个计数。
 
