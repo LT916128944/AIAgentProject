@@ -50,18 +50,28 @@ goto menu
 
 :chat
 "%PY%" "%ROOT%\agent\chat.py"
+if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :loop
 "%PY%" "%ROOT%\agent\run_multi.py"
+if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :multi
+if not defined UE_RAG_STDIN goto multi_interactive
+set "PYTHONIOENCODING=utf-8"
+"%PY%" "%ROOT%\agent\run_windows.py" --plain < "%UE_RAG_STDIN%"
+exit /b %ERRORLEVEL%
+
+:multi_interactive
 "%PY%" "%ROOT%\agent\run_windows.py"
+if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :resume
 "%PY%" "%ROOT%\agent\run_windows.py" --resume latest
+if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :bye

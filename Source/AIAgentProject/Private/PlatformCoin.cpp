@@ -2,6 +2,7 @@
 
 #include "Components/SphereComponent.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/RotatingMovementComponent.h"
 #include "PlatformProgressComponent.h"
 
@@ -9,7 +10,7 @@ ACoin::ACoin()
 {
     PrimaryActorTick.bCanEverTick = true;
 
-    // 根组件是碰撞球：SetActorLocation 跟着走，重叠事件也从这里发
+    // 根组件是碰撞球：SetActorLocation 跟着走，也是「离玩家多近算碰到」的可视半径
     USphereComponent* Sphere = CreateDefaultSubobject<USphereComponent>(TEXT("PickupSphere"));
     Sphere->InitSphereRadius(PickupRadius);
     Sphere->SetMobility(EComponentMobility::Movable);
@@ -34,11 +35,6 @@ void ACoin::BeginPlay()
     if (Progress)
     {
         Progress->RegisterPendingCoin();
-    }
-
-    if (PickupSphere)
-    {
-        PickupSphere->OnComponentBeginOverlap.AddDynamic(this, &ACoin::HandleSphereOverlap);
     }
 }
 
@@ -66,14 +62,43 @@ void ACoin::NotifyCollected(AActor* Collector)
     OnCollected();
 }
 
-void ACoin::HandleSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-                                UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-                                bool bFromSweep, const FHitResult& SweepResult)
+AActor* ACoin::FindPlayerPawn() const
 {
-    // 只认 Pawn（玩家或 AI）。其他重叠不算拾取
-    if (!OtherActor || !OtherActor->IsA<APawn>())
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return nullptr;
+    }
+    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    {
+        if (APlayerController* Player = It->Get())
+        {
+            if (APawn* Pawn = Player->GetPawn())
+            {
+                return Pawn;
+            }
+        }
+    }
+    return nullptr;
+}
+
+void ACoin::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+
+    if (bCollected || !PickupSphere)
     {
         return;
     }
-    NotifyCollected(OtherActor);
+    AActor* Player = FindPlayerPawn();
+    if (!Player)
+    {
+        return;
+    }
+    // 用球心到 Pawn 根的距离。设计图里金币就在平台上方 80uu，站上去就该收到
+    const float Reach = PickupRadius;
+    if (FVector::DistSquared(GetActorLocation(), Player->GetActorLocation()) <= Reach * Reach)
+    {
+        NotifyCollected(Player);
+    }
 }

@@ -3,11 +3,15 @@
 
 #include "TestPawn.h"
 
+#include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "PlatformHUDWidget.h"
 
 namespace TestPawnPickup
 {
@@ -20,14 +24,29 @@ ATestPawn::ATestPawn()
 {
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
-	MoveSpeed = 100000.f;
+	// 3 米/秒：按这个速度设计平台间距，压住空格能跳过去
+	MoveSpeed = 300.f;
 	LookSensitivity = 1.f;
+	bCanBePossessed = true;
 	AutoPossessPlayer = EAutoReceiveInput::Player0;
 	bFindCameraComponentWhenViewTarget = true;
 
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	Root->SetMobility(EComponentMobility::Movable);
 	SetRootComponent(Root);
+
+	// 碰撞胶囊：金币的球形重叠只认 Pawn，没有碰撞体就永远不触发拾取。
+	// 不改成根，避免影响相机与已有的位移口径。
+	// 位移走 AddActorWorldOffset(..., false)，不靠物理阻挡，所以这里只做查询、全部按重叠响应：
+	// 只要一边是 Block，Block 会盖掉另一边的 Overlap，拾取就永远不触发（20261021 实测踩到）。
+	Collision = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Collision"));
+	Collision->SetupAttachment(Root);
+	Collision->InitCapsuleSize(34.f, 88.f);
+	Collision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Collision->SetCollisionObjectType(ECC_Pawn);
+	Collision->SetCollisionResponseToAllChannels(ECR_Overlap);
+	Collision->SetGenerateOverlapEvents(true);
+	Collision->SetRelativeLocation(FVector(0.f, 0.f, 88.f));
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(Root);
@@ -38,6 +57,10 @@ ATestPawn::ATestPawn()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	// 只存路径，不在这里加载资产：蓝图父类改完之前也能构造
+	HudWidgetClass = TSoftClassPtr<UPlatformHUDWidget>(
+		FSoftObjectPath(TEXT("/Game/UI/WBP_HUD.WBP_HUD_C")));
 }
 
 void ATestPawn::TestMoveForward(float Amount)
@@ -58,6 +81,7 @@ void ATestPawn::BeginPlay()
 	}
 	AlignFollowCamera();
 	ClaimPlayerView();
+	EnsureHud();
 }
 
 void ATestPawn::PossessedBy(AController* NewController)
@@ -68,6 +92,7 @@ void ATestPawn::PossessedBy(AController* NewController)
 	{
 		UseThisAsViewTarget(Player);
 	}
+	EnsureHud();
 }
 
 void ATestPawn::PawnClientRestart()
@@ -75,6 +100,49 @@ void ATestPawn::PawnClientRestart()
 	Super::PawnClientRestart();
 	AlignFollowCamera();
 	ClaimPlayerView();
+	EnsureHud();
+}
+
+void ATestPawn::EnsureHud()
+{
+	if (HudInstance)
+	{
+		return;
+	}
+	UClass* WidgetClass = HudWidgetClass.LoadSynchronous();
+	if (!WidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] HudWidgetClass 加载失败：%s"), *HudWidgetClass.ToString());
+		return;
+	}
+	// HUD 挂到本地玩家控制器上。Pawn 上没有 PlayerOwner，只能从控制器或世界取
+	APlayerController* Player = Cast<APlayerController>(GetController());
+	if (!Player)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			Player = World->GetFirstPlayerController();
+		}
+	}
+	if (!Player)
+	{
+		// 还没被控制器占有：下一次 PossessedBy / PawnClientRestart 再来
+		return;
+	}
+	// 没有视口就没有可挂的地方：Automation 的临时世界就是这种，别在里面建控件
+	UWorld* World = GetWorld();
+	if (!World || !World->GetGameViewport())
+	{
+		return;
+	}
+	HudInstance = CreateWidget<UPlatformHUDWidget>(Player, WidgetClass);
+	if (!HudInstance)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] CreateWidget 失败：%s"), *WidgetClass->GetName());
+		return;
+	}
+	HudInstance->AddToViewport();
+	UE_LOG(LogTemp, Log, TEXT("[HUD] 已挂视口：%s"), *WidgetClass->GetName());
 }
 
 void ATestPawn::AlignFollowCamera()
@@ -149,6 +217,7 @@ void ATestPawn::Tick(float DeltaSeconds)
 	const float Right = FMath::Clamp(AxisRight + (AxisD - AxisA), -1.f, 1.f);
 	const float Up = AxisE - AxisQ;
 	ApplyLocalMove(Forward, Right, Up, DeltaSeconds);
+	// 垂直更新每帧都跑：bJumping 只保留"空格还能不能再触发跳跃"，重力与贴地是常驻的
 	UpdateJump(DeltaSeconds);
 }
 
@@ -223,26 +292,60 @@ bool ATestPawn::IsJumping() const
 
 void ATestPawn::UpdateJump(float DeltaSeconds)
 {
-	if (!bJumping)
-	{
-		return;
-	}
-
+	// 常驻重力：不再由 bJumping 决定要不要跑垂直更新。
+	// bJumping 只表示跳跃进行中（空格还能不能再触发跳跃），不表示"要不要受重力"。
 	constexpr float Gravity = 980.f;
 	VerticalVelocity -= Gravity * DeltaSeconds;
 
-	FVector NewLocation = GetActorLocation();
+	const FVector Start = GetActorLocation();
+	FVector NewLocation = Start;
 	NewLocation.Z += VerticalVelocity * DeltaSeconds;
 
-	// 回到或落到起跳高度以下时落地
-	if (VerticalVelocity <= 0.f && NewLocation.Z <= JumpStartZ)
+	// 支撑面统一用已有的 FindGroundBelow 向下探测，不另写一套探地。
+	// 探测长度 = 本帧下落量 + GroundTraceExtra（5uu 容差），脚底贴面时也探得到。
+	const float FallDistance = FMath::Max(Start.Z - NewLocation.Z, 0.f);
+	const float TraceLength = FallDistance + GroundTraceExtra;
+
+	float GroundZ = 0.f;
+	// 只有在下落段或站住时做落地判定；上升段保持向上飞，不被地面夹住。
+	if (VerticalVelocity <= 0.f && FindGroundBelow(TraceLength, GroundZ) && NewLocation.Z <= GroundZ)
 	{
-		NewLocation.Z = JumpStartZ;
+		// 脚底已落到或低于支撑面：夹到面上，垂直速度归零，跳跃结束。
+		// 不往面里多埋：正好取支撑面高度。
+		NewLocation.Z = GroundZ;
 		VerticalVelocity = 0.f;
 		bJumping = false;
 	}
+	// 探不到支撑面（走下平台）就什么都不夹，让重力继续把 Pawn 往下带。
 
-	AddActorWorldOffset(NewLocation - GetActorLocation(), false);
+	// 只改 Z：水平分量由 ApplyLocalMove 负责，这里不动，仍用 bSweep=false。
+	AddActorWorldOffset(NewLocation - Start, false);
+}
+
+bool ATestPawn::FindGroundBelow(float TraceLength, float& OutGroundZ) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	const FVector Feet = GetActorLocation();
+	// 起点抬高一点，避免脚底正好贴在面上时起点已在碰撞体内被忽略
+	const FVector TraceStart = Feet + FVector(0.f, 0.f, GroundTraceExtra);
+	const FVector TraceEnd = FVector(Feet.X, Feet.Y, Feet.Z - FMath::Max(TraceLength, 0.f));
+
+	FCollisionQueryParams Params(TEXT("TestPawnGroundTrace"), false, this);
+	Params.AddIgnoredActor(this);
+
+	FHitResult Hit;
+	if (!World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params) || !Hit.bBlockingHit)
+	{
+		return false;
+	}
+
+	OutGroundZ = Hit.ImpactPoint.Z;
+	return true;
 }
 
 void ATestPawn::OnMoveForwardAxis(float Value)

@@ -18,6 +18,6 @@ description: Asset：查找、加载、保存、exists、Content 路径。
 
 
 `AssetTools`：`find_assets` / `exists` / `load_asset` / `save_assets`。路径写全 `/Game/X.X`。未知路径用最小条件 `find_assets`，不扫整个 Content。
-用户没要求就不保存。保存只写目标路径，不用空列表（会存全部脏资产）。
+写场景之后保存关卡是缺省行为（`UE_DEFAULT_SAVE`，缺省开）；用户明确说不用保存才只改内存。保存只写目标路径，不用空列表（会存全部脏资产）。
 关卡内 Actor 改动 = 存关卡：`SceneTools.get_current_level` → `save_assets({asset_paths:[level]})`。禁 `save_actor`。
 PIE 中 `exists`/`save_assets` 报不存在 = 资产被锁，先 StopPIE。`create` 已存在：先 `exists`，别用报错试错。

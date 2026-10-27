@@ -27,4 +27,11 @@
 - 键盘字母不是 Axis1D。`BindAxisKey` 只能绑鼠标轴、手柄轴；WASD 用 `BindKey` 的 Pressed / Released。`DefaultInput.ini` 里的 `MoveForward` / `MoveRight` 还要 `BindAxis`。两路相加后夹到 1，避免只通一路时不动，也避免两路都通时速度翻倍。场景根是 `USceneComponent` 时，`AddActorWorldOffset` 的扫掠用 false。鼠标看向用 `BindAxisKey(MouseX/MouseY)`，不要绑 ini 里不存在的 `Turn` / `LookUp`。`MouseY` 取反后再交给 pitch。
 - 本引擎 `UInputComponent::BindKey` 只有 4 参数成员函数指针重载，不接受 lambda。要区分按键时用 `void(FKey)`。
 - C++ 导出按配平后的 `UCLASS(...)` 认类。`UCLASS` 和 `class 模块_API 类名` 之间可以换行，参数里的括号要配平，同一文件里的多个类都会导出。Actor 坐标是导出当时的快照，不是实时位置。
-- 让 `ATestActor` 可拾取要同时留下 `bPickable` 和 `InteractableActor`。只写 `Tags` 会和 `ApplyPickable` 分叉。工具目录里没有调用 `BlueprintCallable` 的入口时，用 `set_properties` 写 `bPickable`，用 `add_tag` 加标签，写完再读。读数不对不算成功。不保存关卡。
+- 让 `ATestActor` 可拾取要同时留下 `bPickable` 和 `InteractableActor`。只写 `Tags` 会和 `ApplyPickable` 分叉。工具目录里没有调用 `BlueprintCallable` 的入口时，用 `set_properties` 写 `bPickable`，用 `add_tag` 加标签，写完再读。读数不对不算成功。写对了按任务策略保存关卡（缺省保存）。
+- 新建 Widget Blueprint：`BlueprintTools.create` 的 `asset_type.refPath` 用 `/Script/UMG.UserWidget`，再用 `set_parent` 指到同一类。复查用 `find_assets`，资产类填 `/Script/UMG.WidgetBlueprint`。`save_assets` 保存这一份，关卡按任务策略保存。
+- HUD 要「真的会动」就走 C++：新建 `UUserWidget` 子类，四个文本用 `meta=(BindWidgetOptional)` 按名字绑，`WBP_HUD` 用 `set_parent` 指到它再 `compile_blueprint`。`UUserWidget::NativeTick` 要蓝图侧也实现 Tick 才会被驱动（`bHasScriptImplementedTick`），读数改用 `SetTimer` 定时刷新。`APawn` 上没有 `PlayerOwner`（那是 `UUserWidget` 的），挂 HUD 要从 `GetController()` 或 `GetFirstPlayerController()` 取控制器。
+- 重叠拾取的有效距离是「球半径 + 胶囊半径」，比 `PickupRadius` 大一圈；再用上 `OnComponentBeginOverlap` 会把相邻金币一起收掉。金币这类「进半径就算」的判定只留每帧距离判定。Pawn 胶囊不要用 `Block` 响应：Block 会盖掉另一侧的 `Overlap`，重叠永不触发；位移走 `AddActorWorldOffset(..., false)` 时胶囊只做 `QueryOnly + Overlap` 就够。
+- 资产索引要跟编辑器同步：改关卡或加蓝图后跑 `shortcuts\ingest.bat asset`（关编辑器）。重建会丢掉关卡里已不存在的 Actor 记录，离线检查依赖的目标 Actor（如 `Cube`）必须在关卡里真实存在。`ue_assets.jsonl` 里材质实例的类名是 `MaterialInstanceConstant`，不是 `MaterialInstance`。
+- 没见过的需求不要往术语表里加一行短语。分解器只拿「这一句 + 执行器一行卡片 + 最多 3 条检索标题」，模型拆成已有脚本或 `apply_spec`；脚本接不住就丢弃，不改写成别的动作。`AFpsPawn` 不自动占据玩家，不改 `ATestGameMode`。
+- 临时世界里的 Automation（`CreateWorld` 再 Spawn，测完销毁）通过，不能当成句子点名的关卡里已经有玩法。先加载那个关卡，再按类计数核对；缺了人或靶、地面、灯，失败数 0 也不算通过。
+- 射击关要能开枪，就把这一关的 GameMode Override 设为 `FpsGameMode`。不改全局 `BP_GameMode`，不改 `ATestGameMode`，也不把 `AFpsPawn` 改成自动占据。

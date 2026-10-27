@@ -1,4 +1,6 @@
 #include "Components/SphereComponent.h"
+#include "Components/BoxComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/RotatingMovementComponent.h"
@@ -158,6 +160,77 @@ bool FTestPlatformRunTest::RunTest(const FString& Parameters)
 		Passed &= TestTrue(TEXT("超时归零"), Progress->RemainingSeconds <= 0.f);
 		Passed &= TestFalse(TEXT("失败分支门不开"), Door2 && Door2->IsOpen());
 	}
+
+	// ==== 跳跃落地与可达性：前方 150uu、高 80uu 的高台能不能跳上去 ====
+	if (Pawn)
+	{
+		const FVector JumpStart = Pawn->GetActorLocation();
+		const float LedgeTopZ = JumpStart.Z + 80.f;
+		// 盒半高 10：盒心比顶面低 10，顶面正好在起跳点 +80uu
+		const FVector LedgeCenter = JumpStart + Pawn->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 80.f - 10.f);
+
+		AActor* Ledge = World->SpawnActor<AActor>(LedgeCenter, FRotator::ZeroRotator, Spawn);
+		Passed &= TestNotNull(TEXT("临时高台"), Ledge);
+		if (Ledge)
+		{
+			// 裸 AActor 可能没有根组件：自带就用自带的，没有才补一个，再把碰撞盒挂到根上
+			USceneComponent* LedgeRoot = Ledge->GetRootComponent();
+			if (!LedgeRoot)
+			{
+				LedgeRoot = NewObject<USceneComponent>(Ledge, TEXT("LedgeRoot"));
+				LedgeRoot->SetMobility(EComponentMobility::Movable);
+				Ledge->SetRootComponent(LedgeRoot);
+				LedgeRoot->RegisterComponent();
+			}
+			// 新补的根是单位变换，这里把高台摆回目标位置，别让它留在原点
+			Ledge->SetActorLocation(LedgeCenter);
+
+			UBoxComponent* LedgeBox = NewObject<UBoxComponent>(Ledge, TEXT("LedgeBox"));
+			Passed &= TestNotNull(TEXT("高台碰撞盒"), LedgeBox);
+			if (LedgeBox)
+			{
+				LedgeBox->SetupAttachment(LedgeRoot);
+				LedgeBox->SetBoxExtent(FVector(100.f, 100.f, 10.f));
+				LedgeBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+				LedgeBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+				// Pawn 的落地检测是 ECC_Visibility 直线检测，只有这条通道要挡
+				LedgeBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+				LedgeBox->SetMobility(EComponentMobility::Movable);
+				LedgeBox->RegisterComponent();
+				// 盒心与 Actor 重合：Actor 已在目标点，盒顶面就是起跳点 +80uu
+				LedgeBox->SetRelativeLocation(FVector::ZeroVector);
+			}
+
+			Pawn->SetActorLocation(JumpStart);
+			Pawn->MoveSpeed = 300.f;
+			// JumpHeight 保持默认 100uu
+			Pawn->Jump();
+
+			// 临时世界没有输入：手动驱动「按住前进」，前 30 帧 × 5uu = 150uu，落到高台中心上方
+			float ForwardMoved = 0.f;
+			for (int32 Step = 0; Step < 120 && Pawn->IsJumping(); ++Step)
+			{
+				if (ForwardMoved < 150.f)
+				{
+					Pawn->TestMoveForward(1.f / 60.f);
+					ForwardMoved += Pawn->MoveSpeed / 60.f;
+				}
+				Pawn->Tick(1.f / 60.f);
+			}
+
+			const float LandedZ = Pawn->GetActorLocation().Z;
+			AddInfo(FString::Printf(TEXT("落地 Z：期望 %.1f（高台顶面），实测 %.1f，容差 2uu"), LedgeTopZ, LandedZ));
+			Passed &= TestTrue(TEXT("跳跃后落到高台顶面（容差 2uu）"), FMath::Abs(LandedZ - LedgeTopZ) <= 2.f);
+			Passed &= TestFalse(TEXT("落地后不再处于跳跃状态"), Pawn->IsJumping());
+		}
+	}
+
+	// 数值断言：跳跃水平可达距离必须覆盖相邻平台最大间距
+	const float Gravity = 980.f;
+	const float AirTime = 2.f * FMath::Sqrt(2.f * 100.f / Gravity);
+	const float Reach = 300.f * AirTime;
+	AddInfo(FString::Printf(TEXT("jump reach = %.1f uu"), Reach));
+	Passed &= TestTrue(TEXT("跳跃水平可达距离不小于相邻平台最大间距 200uu"), Reach >= 200.f);
 
 	DestroyPlatformTestWorld(World);
 	return Passed;

@@ -268,6 +268,33 @@
       "required": ["filterExpression"],
       "observed": "DiscoverTests 无参数，约数秒后返回 {\"returnValue\":\"{\\\"status\\\": \\\"ready\\\"}\"}。GetTestResults 的 returnValue 是 JSON 字符串，字段 tests/passed/failed/skipped/total/duration，失败数看 failed，不要看单词 passed。",
       "gotcha": "同一编辑器会话里 DiscoverTests 一次即可。过滤器没有命中时 RunTestsByFilter 直接报 No automation tests matched filter，不是 failed:0。编辑器开着且 Live Coding 启用时，UBT 编 AIAgentProjectEditor 会被拒绝；游戏目标 Build.bat AIAgentProject Win64 Development 能编出 error C。-run=Compile 在 5.8 不存在。"
+    },
+    {
+      "backend": "monolith",
+      "toolset_name": "mesh",
+      "tool_name": "get_actor_info",
+      "arguments": { "actor_name": "Cube" },
+      "required": ["actor_name"],
+      "return_shape": { "name": "StaticMeshActor_0", "label": "Cube", "transform": { "location": [1200, 400, 150], "rotation": [0, 0, 0], "scale": [1, 1, 1] } },
+      "observed": "2026-10-26。actor_name 接受 label 或对象名。transform.location 是 [x, y, z]，不是 {x, y, z}。",
+      "gotcha": "未保存的关卡 Actor 在编辑器重启后不存在。给模型的工具名不能含点：mesh.move_actor 会被接口 400 拒绝。"
+    },
+    {
+      "backend": "monolith",
+      "toolset_name": "mesh",
+      "tool_name": "move_actor",
+      "arguments": { "actor_name": "Cube", "location": [1200, 400, 150] },
+      "observed": "2026-10-26。UE_ALLOW_MONOLITH_WRITE 不是 true 时拒绝。打开后 new_transform.location 为 [1200, 400, 150]。",
+      "gotcha": "mesh 的非只读只跟 UE_ALLOW_MONOLITH_WRITE，不跟 UE_ALLOW_BLUEPRINT。"
+    },
+    {
+      "backend": "monolith",
+      "toolset_name": "blueprint",
+      "tool_name": "compile_blueprint",
+      "arguments": { "asset_path": "/Game/BP_Gun" },
+      "return_shape": { "success": true, "status": "UpToDate", "error_count": 0, "warning_count": 0 },
+      "observed": "2026-10-26。成功不是官方那种空返回。success 为 true 且 error_count 为 0。这次调用不保存。",
+      "gotcha": "asset_path 可写 /Game/BP_Gun。官方 compile_blueprint 仍要 /Game/BP_Gun.BP_Gun，成功仍是返回空。"
     }
   ]
 }

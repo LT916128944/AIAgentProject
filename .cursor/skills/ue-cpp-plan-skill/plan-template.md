@@ -2,7 +2,7 @@
 
 按下列六段写。缺一段则 Plan 不完整。不要贴整份头文件；签名 + 职责 + 落点即可。
 
-仅当本次**将改 UE 项目**（C++ 或蓝图）时落盘：`.cursor/memory/plans/YYYY-MM-DD.md`（一天一份；同日多需求用 `## 主题` 追加）。改 Cursor / 分析文档 / 没动手 → 不写。不要写进 `documents/`。
+仅当本次**将改 UE 项目**（C++ 或蓝图）时落盘：`.cursor/memory/plans/YYYY-MM-DD.md`（一天一份；同日多需求用 `## 主题` 追加）。改 Rule、Skill 或分析文档、没动手 → 不写。Cursor 与 Codex 都写这个路径。不要写进 `documents/`。
 
 ## 1. Summary
 
@@ -47,4 +47,4 @@
 
 ## 6. Verification
 
-只验用户要的那一项。写：编译目标（若需要）+ 一条运行/日志期望。编辑器能验就不 PIE。用户说不用运行 / 不用保存 → 不 StartPIE、不存盘。
+只验用户要的那一项。写：编译目标（若需要）+ 一条运行/日志期望。编辑器能验就不 PIE。写场景之后保存关卡、玩法验收进 PIE 都跟随 `UE_DEFAULT_SAVE` / `UE_DEFAULT_PIE`（缺省开）；用户说不用运行 / 不用保存 → 任务写 `pie: false` / `save: false`。

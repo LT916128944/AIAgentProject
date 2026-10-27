@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-10-21
 status: active
 owner: 侑
 ---
@@ -24,7 +24,7 @@ RAG/ue-rag 各包只能引用下列范围（升级 2 会把本表编成测试）
 1. `core/editor_exec.py` 引用 `agent.harness`（拒绝结果要带 `policy_snapshot`，暂不搬这个函数）
 2. `server/gateway.py` 引用 `agent.understand`（`/api/structured` 包理解器，暂不拆网关）
 
-历史：`pipelines/export_agent_skill.py` 引用 `agent.skill_prompt` 已在升级 2（2026-10-20）拆掉，常量移到 `core/project_rules.py`。白名单以外的新 import 一律判失败。
+历史：`pipelines/export_agent_skill.py` 引用 `agent.skill_prompt` 已在升级 2（2026-10-20）拆掉，常量移到 `core/project_rules.py`。`core/rag_core.py` 引用 `agent.cli_log` 已在 2026-10-21 拆掉，状态行移到 `core/console.py`，`agent/cli_log.py` 只转出这两个函数。白名单以外的新 import 一律判失败。
 
 ## 改动授权规则
 

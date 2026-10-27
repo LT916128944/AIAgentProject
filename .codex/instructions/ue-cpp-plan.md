@@ -1,0 +1,14 @@
+# UE 项目任务门禁
+
+触发：要改 UE 项目（C++ / 蓝图 / 关卡或资产经编辑器 MCP）。蓝图连线先看 `UE_ALLOW_BLUEPRINT`。
+
+1. 先读并遵守 `.codex/skills/ue-cpp-plan-skill/SKILL.md`
+2. **将改 UE 项目时**先把 Plan 追加到 `.cursor/memory/plans/YYYY-MM-DD.md`，未确认不写 `.h` / `.cpp` / `Build.cs`、不改蓝图
+3. **UE 项目改动完成后**追加 `.cursor/memory/任务记录/YYYY-MM-DD.md`（只碰当天）。可复用经验进 `conventions.md`
+4. 无确切类名/路径 → RAG 先行；有路径 → 只读范式文件
+5. 排障按 `ue-history.md`。落盘前只读 `conventions.md`（若有）和当天文件末尾，禁止扫其他日期
+6. 本升级文件的预授权只覆盖该文件列出的路径；不改 UE 工程时不写 Plan
+
+不落盘：改 Rule/Skill、分析 `documents/`、问答、没动 UE 项目的讨论。
+单行修 bug / 用户说「直接改」：可跳过大 Plan，但改了 UE 工程仍写当天任务记录。
+计划与约定两边共用 `.cursor/memory`。

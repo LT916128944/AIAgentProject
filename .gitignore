@@ -47,3 +47,6 @@ Thumbs.db
 
 # 其他杂项
 Plan/Image/
+
+# Codex 技能发现联接。正文在 .codex/skills，避免再提交一份
+.agents/skills

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-10-23
 status: active
 owner: 侑
 ---
@@ -15,6 +15,8 @@ owner: 侑
 - `run_windows.py`：多窗口，规划者 / 任务书 / 快路径，每扇一次 `run_task`（只读条目可并行过编辑器闸门），配 `board.py` 面板、`brief.py` 任务书 + 人审门、`ledger.py` 台账
 
 Cursor 对话仍按根目录 `AGENTS.md` 说话，编辑器操作走 `scan_mcp_tools.py` + `call_mcp_tool.py`，与闭环汇合在同一个 `editor_exec.py`。
+
+- DeepSeek Harness（可选外壳，2026-10-23 起）：DSH 打开工作区 `E:\UEProject\AIWork`，只经 9 个 `mcp__uerag__*` 汇合到同一份检索库与同一个 `editor_exec.py`；配置模板 `RAG/ue-rag/dsh/cordis.patch.yml`，说明 `RAG/ue-rag/dsh/README.md`。写策略只读 `RAG/ue-rag/data/dsh/session_task.json`，完成证据只认 `read_contract` + `verify`。
 
 ## 当前架构事实
 

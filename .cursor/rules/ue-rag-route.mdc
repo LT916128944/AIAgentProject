@@ -7,7 +7,7 @@ alwaysApply: true
 
 触发：要动编辑器（Actor、属性、验证、编译已有蓝图）。
 
-1. 先读并遵守 `.cursor/skills/ue-rag-route-skill/SKILL.md`，第一动作 `scan_mcp_tools.py`
+1. 先读 `RAG/ue-rag/.env` 的 `UE_EDITOR_BACKEND`。未写或 `official`：读 `.cursor/skills/ue-rag-route-skill/SKILL.md`，第一动作 `scan_mcp_tools.py`。`monolith`：读 `.cursor/skills/ue-monolith-backend-skill/SKILL.md`，走 discover / describe / exec，不扫描官方工具
 2. 蓝图 Graph 先看 `UE_ALLOW_BLUEPRINT`：`false` 不改图，走 `ue-manual-blueprint-skill` 写 `Plan/`；`true` 才扫描并改图。材质图、UMG、动画蓝图、Niagara 的连线不论开关，都走人工清单
 3. 禁止 `GetDynamicTools` 扫 unreal 命名空间，禁止 `tool_search` / `list_toolsets` / 拉整份 schema
 4. 纯问答、只改 C++ 源文件、只问项目里有什么：不走工具扫描。资产语义查询仍走 `search_ue_project`

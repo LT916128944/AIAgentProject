@@ -17,11 +17,11 @@ description: >-
 只在 **UE 项目被实际改动并完成** 时写磁盘：
 
 - 算：写了游戏/插件的 `.h` / `.cpp` / `Build.cs`；或经 MCP 改了蓝图 / 关卡 Actor / UMG / Niagara / Material 等编辑器对象
-- 不算：改 Cursor Rule/Skill/AGENTS、分析 `documents/`、问答、只出方案没动手
+- 不算：改 Rule/Skill/AGENTS、分析 `documents/`、问答、只出方案没动手
 
 将改 UE 时先落 Plan；改完再落任务记录。都是一天一份。不要写进 `documents/`。
 
-写 Plan 或任务记录前：若存在则读 `.cursor/memory/conventions.md`；当天文件只读末尾。禁止扫 `plans/`、`任务记录/` 的其他日期，禁止扫文件夹。
+写 Plan 或任务记录前：若存在则读 `.cursor/memory/conventions.md`；当天文件只读末尾。禁止扫 `plans/`、`任务记录/` 的其他日期，禁止扫文件夹。计划、约定和给人看的任务记录 Cursor 与 Codex 共用 `.cursor/memory`，不要在 `.codex/memory` 再写一份计划或约定。
 
 ## 流程
 

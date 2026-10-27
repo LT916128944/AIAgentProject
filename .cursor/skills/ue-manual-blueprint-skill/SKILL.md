@@ -27,7 +27,13 @@ python -c "from config import allow_blueprint; print(allow_blueprint())"
 
 `--query` 在开关为 false 时也会自己写这份文件。已经有同一次的文件就改那一份，不要再新建。
 
-## true
+## true 且后端是 monolith
+
+不写人工连线清单来代替执行。同一张蓝图、同一个目标走 Monolith：还不知道 action 才 discover，然后 describe 一个 action，然后 exec，再做编译或只读复查。这一串算 1 次。复查通过就停。最多 3 次。第 3 次仍失败就停，原因写明「已尝试 3 次，Monolith 不具备该能力」和最后一次错误原文。不改连官方 8000，不换另一张蓝图，不把失败改写成待办。
+
+`UE_ALLOW_BLUEPRINT=false` 时立刻拒绝，次数记 0，不出现上面这句止损。
+
+## true 且后端不是 monolith
 
 改走 `ue-rag-route-skill` 和 `ue-blueprint-skill`。先读图，再最小改，再编译。不保证一次做对。同一目标失败达到 `max_retries`（缺省 3）后停止，不要换一张蓝图。
 

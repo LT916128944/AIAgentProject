@@ -1,0 +1,3 @@
+# 项目层。钩子定义在同目录 hooks.json。未信任时 Codex 会跳过，需在会话里执行 /hooks。
+[features]
+hooks = true

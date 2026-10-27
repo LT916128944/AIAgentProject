@@ -60,6 +60,18 @@ Get-ChildItem -LiteralPath $SkillsRoot -Directory | ForEach-Object {
     if (-not $fm['name']) { Report $skill 'frontmatter has no name' }
     elseif ($fm['name'] -ne $skill) { Report $skill ("frontmatter name '{0}' != folder '{1}'" -f $fm['name'], $skill) }
     if (-not $fm['description']) { Report $skill 'frontmatter has no description' }
+    $workflowOnly = @(
+        'ue-cpp-plan-skill',
+        'ue-rag-route-skill',
+        'ue-manual-blueprint-skill',
+        'ue-history-skill',
+        'ue-monolith-backend-skill'
+    )
+    if ($workflowOnly -contains $skill) {
+        $size = (Get-Item -LiteralPath $path).Length
+        if ($size -gt $SizeCap) { Report $skill "size $size > $SizeCap bytes" }
+        return
+    }
     if ($skill -ne 'ue-low-token-skill' -and -not $applyText.Contains("'" + $skill + "'")) {
         Report $skill 'not registered in apply_index_block.ps1 $SkillToolsets'
     }

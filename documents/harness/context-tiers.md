@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-10-23
 status: active
 owner: 侑
 ---
@@ -26,6 +26,18 @@ owner: 侑
 - `documents/harness/`（overview / boundaries / context-tiers / design-template / scoreboard），每份都带 `last_updated` 与 `status`，过期字段以 `feature_list.json` 为准
 - `RAG/ue-rag/data/harness/feature_list.json`、`progress.json`
 - `search_ue_project`（项目语料检索：资产在哪、是什么类）
+
+## DSH 会话里的三层（2026-10-23 起，第二入口）
+
+DSH 外壳复用同一套分层，只把取用通道换成 `mcp__uerag__*` 与技能目录：
+
+| 层 | DSH 里对应 | 取法 |
+| --- | --- | --- |
+| Tier 1 常驻 | 根 `AGENTS.md` 的九条铁律、路由表与「DeepSeek Harness」一节 | DSH 会话照样整份常驻，不另写一份 |
+| Tier 2 按需 | `.dsh/skills`（联接到 `.agents/skills`）里的 `ue-dsh-session` / `ue-dsh-route` / `ue-dsh-verify` / `ue-dsh-handoff` 与域技能 | 按名字取一个，不扫整个技能目录 |
+| Tier 3 检索 | `search_project` / `scan_editor_tools` / `get_editor_tool_schema` / `resume_context` | 一次一个；语义查询先 `search_project`，编辑器工具先扫卡片再取单项 schema |
+
+`WORKFLOW.md` 在 DSH 里仍是 Tier 3：按标题只读需要的那一节，不整份读入。
 
 ## 操作细节
 

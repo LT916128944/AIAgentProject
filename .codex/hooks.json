@@ -1,0 +1,30 @@
+{
+  "description": "UE 门禁：会话注入短文，shell 里拦写图。信任前钩子不跑，在 Codex 里执行 /hooks。",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "E:\\UEProject\\AIWork\\RAG\\ue-rag\\.venv\\Scripts\\python.exe E:\\UEProject\\AIWork\\AIAgentProject\\.codex\\hooks\\session_start.py",
+            "statusMessage": "加载 UE 门禁",
+            "additionalContextLimit": 2000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|shell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "E:\\UEProject\\AIWork\\RAG\\ue-rag\\.venv\\Scripts\\python.exe E:\\UEProject\\AIWork\\AIAgentProject\\.codex\\hooks\\refuse_graph_writes.py",
+            "statusMessage": "检查写图开关"
+          }
+        ]
+      }
+    ]
+  }
+}
