@@ -1,0 +1,5 @@
+# 操作手册同步
+
+触发：落实计划后，入口、编辑器后端、环境变量缺省、动作表、裁判种类或菜单，与 `WORKFLOW.md`「当前系统」或两份 README 不一致。
+
+改「当前系统」、`README.md`、`RAG/ue-rag/README.md`，以及 `documents/harness/overview.md` 里被引用的那几句。不追加沿革，不整份重读 `WORKFLOW.md`。事实没变则不改这三处。

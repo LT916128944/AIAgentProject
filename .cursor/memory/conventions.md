@@ -35,3 +35,14 @@
 - 没见过的需求不要往术语表里加一行短语。分解器只拿「这一句 + 执行器一行卡片 + 最多 3 条检索标题」，模型拆成已有脚本或 `apply_spec`；脚本接不住就丢弃，不改写成别的动作。`AFpsPawn` 不自动占据玩家，不改 `ATestGameMode`。
 - 临时世界里的 Automation（`CreateWorld` 再 Spawn，测完销毁）通过，不能当成句子点名的关卡里已经有玩法。先加载那个关卡，再按类计数核对；缺了人或靶、地面、灯，失败数 0 也不算通过。
 - 射击关要能开枪，就把这一关的 GameMode Override 设为 `FpsGameMode`。不改全局 `BP_GameMode`，不改 `ATestGameMode`，也不把 `AFpsPawn` 改成自动占据。
+- monolith 插件自带完整 Niagara 动作集（`niagara.create_system` 模板用 `/Niagara/DefaultAssets/DefaultSystem`、`add_module`/`set_module_input_value`/`set_module_enabled`/`request_compile`、验编译用 `get_system_diagnostics`），不用切 official 后端；模块脚本资产在 `/Niagara/Modules/...`，Burst 类在 `Emitter/` 子目录。
+- 新增 UCLASS 必须关编辑器全量重建，Live Coding 干不了；Live Coding 激活时 `Build.bat` 直接报 OtherCompilationError。Niagara 公开头 include 不带 `Niagara/` 前缀；`TSoftObjectPtr` 从路径字符串构造要走 `FSoftObjectPath`。
+- 非交互跑 start.bat：chcp 65001 在 stdin 被重定向时会丢掉已缓冲输入（入口读到 EOF 空转）。已改为 UE_RAG_STDIN 定义时跳过 chcp，:loop 分支同样吃 UE_RAG_STDIN，喂「需求行 + 兜底裁决行」的文件即可。裁决行若没被暂停消费，会被 REPL 当成下一条需求——非交互只喂确定会暂停的裁决，跑完确认退出码。/Game 裸根目录不算合法补路径，要用 /Game/目录 或 /Game/BP_名。
+- 模型网关（newapi.opensosen.com）的模型名会下架：deepseek-flash 已无可用渠道（503 model_not_found），现用 deepseek-v4.1-flash；网关对 urllib 默认 UA 返回 Cloudflare 403/1010，探活要带 UA。Windows User/Machine 级环境变量里的旧 DEEPSEEK_API_KEY 会压过 .env（load_dotenv 默认不覆盖），表现为理解器 401「无效的令牌」；config._load_env 已改 override=True 以 .env 为准，UE_LLM_MODEL 已改 deepseek-v4.1-flash。
+- FPS 关「视角/射击/手雷全失灵但绑定代码都在」：先查 Possess 被谁抢——世界子系统 OnWorldBeginPlay 里生成替身并 Possess 是隐形劫持高发点（SimpleVehicleWorldSubsystem 教训）。这类自动劫持要用 cvar 门（simplevehicle.AutoSpawn，默认 0），不要无条件抢玩家控制器。多窗口并行 solve 各写一套同名类，编译债会拖到下一次 Build 才以 UHT shares engine name 爆雷：孤儿副本删前先确认零外部引用（include 与类名两路 grep）。
+- monolith 后端关编辑器：先 list_dirty_packages 确认 0 脏包，再 run_console_command QUIT_EDITOR；重编命令是 Build.bat AIAgentProjectEditor Win64 Development -Project=<uproject> -WaitMutex（judge.cpp_build_argv 同款）。
+- 载具自由视角：车身不设 bUseControllerRotationYaw，相机 bUsePawnControlRotation=true，鼠标 BindAxisKey(MouseX/MouseY) 只喂 AddControllerYaw/PitchInput——视角与转向解耦，车身朝向仍由 A/D 驱动。上下车走「走路 Pawn 绑 E 找最近载具 → SetDriver+Possess(载具)；载具绑 E → ExitVehicle → Possess 回原 Pawn」；SetDriver 收 APawn* 别限 ACharacter*（FpsPawn 不是 Character）。放进关卡的 native Actor 重编后自动长出新增默认子对象，不用重放。
+- APawn 子类的局部变量别叫 Controller（遮蔽 APawn::Controller，C4458 当错误）。编辑器内只读探查脚本输出超 200 字会被 monolith_backend.py 截断——让 python 写临时文件再读。
+- 后台/超时方式调 start.bat 的调用方要 kill 整棵 cmd 进程树：残留的 cmd 会拿着旧 stdin 文件在 REPL 里自己起新 run（20261028-192951 孤儿 run：静默改了源码、编了译，没写 run md 没归档——无主写入者比失败更危险，证据链断在半空）。
+- 离线检查的「不连编辑器/不依赖 .env」必须用代码钉住：eval/_pin_offline.close_now() 进程级封闭（本机 .env 开关不渗进断言），走 exec_editor_tool 的断言一律配假 exec_tool；agent 里裸 `load_dotenv()` 是禁手（按 CWD 自己找 .env，会把封闭打穿），统一 `load_dotenv(config.ENV_PATH, override=True)`。
+- solver（agent/solver.py）的诚实口径三条底线：改需求的句子方案里必须有交付性改动（patch/apply_spec/写原语；开关卡/保存/编译/观察不算，见 _SOLVER_INFRA_ACTIONS）；有写码步骤必须真编译（build_rounds>0）；automation 收口绿只对纯只读任务算完成。参数形状不靠猜：describe 校准（_calibrate_args）。

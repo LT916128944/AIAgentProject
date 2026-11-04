@@ -9,7 +9,7 @@
             "type": "command",
             "command": "E:\\UEProject\\AIWork\\RAG\\ue-rag\\.venv\\Scripts\\python.exe E:\\UEProject\\AIWork\\AIAgentProject\\.codex\\hooks\\session_start.py",
             "statusMessage": "加载 UE 门禁",
-            "additionalContextLimit": 2000
+            "additionalContextLimit": 2400
           }
         ]
       }

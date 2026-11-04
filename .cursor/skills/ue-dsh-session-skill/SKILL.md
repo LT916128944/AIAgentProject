@@ -30,3 +30,4 @@ description: DSH 会话开工与 UE 操作路由。先 resume_context；编辑�
 - 先 `read_contract(run_id)`；再对未过且非 `manual` 的条款调 `verify(run_id, criterion_id)`。
 - 引用返回的 `{ok, kind, summary}`；`manual` 永远 false；连续两条 verify 失败就停，交人。
 - 模型正文里的「已完成」不是证据。
+- 入口、后端、环境变量缺省、动作表、裁判或菜单推翻了操作手册时，改 `WORKFLOW.md`「当前系统」、两份 README 和 `overview.md` 里被引用的句子。不整份读 `WORKFLOW.md`，不追加沿革。事实没变则不改。

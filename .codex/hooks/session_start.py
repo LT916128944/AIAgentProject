@@ -1,4 +1,4 @@
-"""Codex SessionStart：注入与 .cursor/rules 对等的四份短文。"""
+"""Codex SessionStart：注入与 .cursor/rules 对等的短文。"""
 import json
 import sys
 from pathlib import Path
@@ -9,13 +9,14 @@ _FILES = (
     "ue-rag-route.md",
     "ue-cpp-plan.md",
     "ue-history.md",
+    "ue-doc-sync.md",
 )
 
 
 def additional_context(directory: Path | None = None) -> str:
     root = directory if directory is not None else _DIR
     parts = [
-        "以下四份短文在 Codex 里始终有效，对应 Cursor 的 .cursor/rules。技能正文在 .codex/skills。",
+        "以下短文在 Codex 里始终有效，对应 Cursor 的 .cursor/rules。技能正文在 .codex/skills。",
     ]
     for name in _FILES:
         path = root / name
