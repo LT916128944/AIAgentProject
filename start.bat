@@ -1,5 +1,6 @@
 @echo off
-chcp 65001 >nul
+rem stdin 被重定向（UE_RAG_STDIN）时禁用 chcp：chcp 会丢弃已缓冲的重定向输入，导致入口读不到需求行
+if not defined UE_RAG_STDIN chcp 65001 >nul
 setlocal EnableExtensions
 
 for %%I in ("%~dp0..\RAG\ue-rag") do set "ROOT=%%~fI"
@@ -54,12 +55,35 @@ if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :loop
-"%PY%" "%ROOT%\agent\run_multi.py"
+if defined UE_RAG_STDIN (
+  set "PYTHONIOENCODING=utf-8"
+  "%PY%" "%ROOT%\agent\run_multi.py" < "%UE_RAG_STDIN%"
+) else (
+  "%PY%" "%ROOT%\agent\run_multi.py"
+)
 if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :multi
+call :warn_live_runs
+if errorlevel 1 exit /b 1
 if not defined UE_RAG_STDIN goto multi_interactive
+if not exist "%UE_RAG_STDIN%" (
+  if exist "%UE_RAG_STDIN%.consumed" (
+    echo 输入已被另一个进程占用
+    exit /b 1
+  )
+  echo 找不到输入文件: %UE_RAG_STDIN%
+  exit /b 1
+)
+rem 先改名再重定向。文件已被 cmd 打开时 Windows 拒绝改名，独占必须发生在打开之前。
+for %%F in ("%UE_RAG_STDIN%") do ren "%%~fF" "%%~nxF.consumed"
+if errorlevel 1 (
+  echo 输入已被另一个进程占用
+  exit /b 1
+)
+for %%F in ("%UE_RAG_STDIN%") do set "UE_RAG_STDIN=%%~dpF%%~nxF.consumed"
+set "UE_RAG_STDIN_CLAIMED=1"
 set "PYTHONIOENCODING=utf-8"
 "%PY%" "%ROOT%\agent\run_windows.py" --plain < "%UE_RAG_STDIN%"
 exit /b %ERRORLEVEL%
@@ -77,4 +101,14 @@ goto menu
 :bye
 echo 退出
 endlocal
+exit /b 0
+
+:warn_live_runs
+"%PY%" -c "from agent.run_guard import warn_live_runs; raise SystemExit(warn_live_runs())"
+if not errorlevel 2 goto warn_ok
+echo 有仍在心跳的 run。继续可能和它抢同一句需求。输入 Y 放行，其他键退出。
+set /p GO=放行?
+if /I "%GO%"=="Y" goto warn_ok
+exit /b 1
+:warn_ok
 exit /b 0

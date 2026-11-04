@@ -75,6 +75,7 @@ AIWork\
 | --- | --- | --- |
 | 固定句式的窄任务（编译工程、编译一张蓝图、移动 Actor、拾取裁决、放 Actor） | `start.bat` 菜单 2/3 | L0 命中 0 次；弱命中 1 次理解器 |
 | 新需求，要拆句、要改 C++、要摆场景 | `start.bat` 菜单 3（`run_windows.py`），先出任务书人审 | 1 次理解器 + 每扇图内 plan 若干次 |
+| 表外需求（动作表没有对应动作，如改射速/改常量） | 同菜单 3：理解器/规划者接不住时自动补一扇受控求解扇（`UE_SOLVER_ENABLED=true`，本机已开）；求解扇走「源码定位 → patch 改已有文件 → 编译 → automation 收口」，方案没给过滤器就再补选一次真测试名。台账 `done` 要有改动证据。`UE_RAG_STDIN` 一份输入只会被一个进程消费 | 1 次理解器 + solve 扇 ≤6 次模型 |
 | 只读研究、方案对比、报错定位（不改工程） | DeepSeek Harness（DSH）里的 `search_project` / `workflow` | 检索 0 次；研究模板 5 个子代理 |
 | 单步编辑器操作 | 看 `UE_EDITOR_BACKEND`。`monolith` 用 `scripts/monolith_backend.py`；`official` 用扫描脚本。DSH 里仍是原来的 3 个编辑器工具，内部转到当前后端 | 每步 ≥1 次 |
 | 续接没跑完的多窗口 run | `start.bat` 菜单 4 | 只跑没完成的扇 |

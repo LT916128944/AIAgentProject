@@ -51,7 +51,7 @@
 
 ## Codex
 
-Codex 读本文件，不读 `.cursor/rules/*.mdc`。同等短文在 `.codex/instructions/`，由 `.codex/hooks.json` 的 `SessionStart` 注入；钩子没注入时，开工先读这四份短文。技能正文在 `.codex/skills`；自动发现要 `.agents/skills`（跑 `.codex/link_agents_skills.ps1`）。计划、约定、给人看的任务记录两边共用 `.cursor/memory`。写图拦截：Cursor 用 `.cursor/hooks.json`，Codex 用 `PreToolUse`。钩子要在 Codex 里 `/hooks` 信任后才跑。
+Codex 读本文件，不读 `.cursor/rules/*.mdc`。同等短文在 `.codex/instructions/`，由 `.codex/hooks.json` 的 `SessionStart` 注入；钩子没注入时，开工先读 `.codex/instructions/` 里的短文。技能正文在 `.codex/skills`；自动发现要 `.agents/skills`（跑 `.codex/link_agents_skills.ps1`）。计划、约定、给人看的任务记录两边共用 `.cursor/memory`。写图拦截：Cursor 用 `.cursor/hooks.json`，Codex 用 `PreToolUse`。钩子要在 Codex 里 `/hooks` 信任后才跑。
 
 ## 维护
 

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-23
+last_updated: 2026-10-27
 status: active
 owner: 侑
 ---
@@ -11,7 +11,7 @@ owner: 侑
 每次会话都在，总量被刻意压小：
 
 - `AGENTS.md`（根目录唯一权威：地图 + 九条铁律 + 路由表，≤120 行）
-- `.cursor/rules/*.mdc` 四条短触发器：`ue-rag-route`、`ue-history`、`ue-cpp-plan`、`ue-harness-session`
+- `.cursor/rules/*.mdc` 五条短触发器：`ue-rag-route`、`ue-history`、`ue-cpp-plan`、`ue-harness-session`、`ue-doc-sync`
 
 `WORKFLOW.md` 和 `周计划.md` **不是 Tier 1**。开工状态从 `progress.json` / `feature_list.json` 重建，不从这两份长文找。
 
