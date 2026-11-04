@@ -26,5 +26,5 @@ private:
 	FVector Direction = FVector::ForwardVector;
 	float Remaining = 0.f;
 
-	static constexpr float Speed = 900.f;
+	static constexpr float Speed = 90000.f;
 };

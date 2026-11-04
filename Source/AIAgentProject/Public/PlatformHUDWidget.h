@@ -47,8 +47,12 @@ protected:
     UPROPERTY(BlueprintReadOnly, Category = "Platform", meta = (BindWidgetOptional))
     TObjectPtr<UTextBlock> txt_Clear;
 
-    UPROPERTY(BlueprintReadOnly, Category = "Platform", meta = (BindWidgetOptional))
-    TObjectPtr<UTextBlock> txt_Fail;
+	UPROPERTY(BlueprintReadOnly, Category = "Platform", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> txt_Fail;
+
+	// 手榴弹库存。FPS 关没有进度中枢，这条读数不进 Refresh 的 Progress 早退分支
+	UPROPERTY(BlueprintReadOnly, Category = "Platform", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> txt_Grenade;
 
 private:
     UFUNCTION()

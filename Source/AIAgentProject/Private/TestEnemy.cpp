@@ -47,6 +47,7 @@ void ATestEnemy::InitPatrol(float InPatrolRadius, float InMoveSpeed)
     }
 
     PatrolComponent->PatrolRadius = InPatrolRadius;
+    // 组件里没有 PatrolSpeed 成员，巡逻速度写入 MoveSpeed
     PatrolComponent->MoveSpeed = InMoveSpeed;
     PatrolComponent->StartPatrol();
 

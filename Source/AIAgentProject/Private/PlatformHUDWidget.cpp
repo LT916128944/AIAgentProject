@@ -2,6 +2,7 @@
 
 #include "Components/TextBlock.h"
 #include "Engine/World.h"
+#include "FpsPawn.h"
 #include "PlatformProgressComponent.h"
 #include "TimerManager.h"
 
@@ -64,6 +65,16 @@ UPlatformProgressComponent* UPlatformHUDWidget::GetProgress() const
 
 void UPlatformHUDWidget::Refresh()
 {
+    // 手榴弹读数独立于进度中枢：FPS 关没有 Progress，放在早退之前才会刷
+    if (txt_Grenade)
+    {
+        if (const AFpsPawn* Pawn = Cast<AFpsPawn>(GetOwningPlayerPawn()))
+        {
+            txt_Grenade->SetText(FText::FromString(
+                FString::Printf(TEXT("手榴弹 %d"), Pawn->GrenadeCount)));
+        }
+    }
+
     UPlatformProgressComponent* Progress = GetProgress();
     if (!Progress)
     {
