@@ -2,7 +2,7 @@
 
 > **开工协议**：开工先在 `RAG/ue-rag`（用该目录 `.venv`）跑 `python agent/resume_context.py`，它打印 [`progress.json`](../RAG/ue-rag/data/harness/progress.json) 的 goal / phase / next_action、[`feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json) 里第一条 `pending`（`passed` 只由裁判或离线检查改写，不认模型宣布）和最新一份交接的 `unmet`，不超过 200 字；进程概览见 [`documents/harness/overview.md`](documents/harness/overview.md)。本文按标题只读需要的那一节。和后文沿革冲突时，以「当前系统」和 `feature_list.json` 为准。
 
-## 当前系统（2026-10-28）
+## 当前系统（2026-11-11）
 
 ### 一次运行只连一个编辑器
 
@@ -13,65 +13,59 @@
 | `official`（键缺失时的缺省） | `UE_MCP_URL`，缺省 `http://127.0.0.1:8000/mcp` | `scan_mcp_tools.py` → `call_mcp_tool.py` → `core/editor_exec.py` |
 | `monolith` | `UE_MONOLITH_URL`，缺省 `http://127.0.0.1:9316/mcp` | `scripts/monolith_backend.py`，或 `backends/monolith.py` 的 discover / describe / exec |
 
-两边同时在听时，`core/editor_launch.py` 拒绝启动：`monolith` 要关掉 Unreal MCP（ModelContextProtocol），`official` 要关掉 Monolith，然后重启编辑器。PCG 在 Monolith 上没有命名空间，调用失败，不回退 8000。
+两边同时在听时启动被拒绝：关掉 `.env` 没选的那个插件再重启编辑器。PCG 在 Monolith 上没有命名空间，调用失败，不回退 8000。
 
-裁判种类仍是 `editor_assert`、`blueprint_compile`、`cpp_build`、`automation`。`backend=monolith` 时位置走 `mesh.get_actor_info`，蓝图编译走 `blueprint.compile_blueprint`，控件编译走 `ui.compile_widget`，Automation 走 `editor.run_automation_tests`。`official` 仍用原来的工具。
+裁判种类仍是 `editor_assert`、`blueprint_compile`、`cpp_build`、`automation`。`backend=monolith` 时位置走 `mesh.get_actor_info`，蓝图编译 `blueprint.compile_blueprint`，控件 `ui.compile_widget`，Automation `editor.run_automation_tests`。`backend=monolith` 且动作是 `compile_blueprint` / `bind_blueprint` / `create_widget_blueprint` / `edit_widget_blueprint` 时，`agent/sequence.py` 的 `repair_blueprint` 对同一张蓝图最多修 3 次，第 3 次仍失败就停（「已尝试 3 次，Monolith 不具备该能力」），不改连 8000；对应 `UE_ALLOW_*` 不是 true 时次数是 0，步骤写入 `Plan/`。
 
-DSH 的 9 个 `mcp__uerag__*` 不增加。`scan_editor_tools` / `get_editor_tool_schema` / `exec_editor_tool` 在 `server/dsh_bridge.py` 转到已锁定的后端。
+只读诊断句（「看看 / 检查 / 核对 / 是否有问题」，且不含「实现 / 新建 / 创建 / 修改 / 摆 / 放置」）由 `agent/diagnose.py` 归到源码里唯一一条 Automation 过滤器，收成已有的 `run_automation_test`；零条或多条都不挑，不扩动作表。
 
-本仓库 `.env.example` 里未注释的项是当前这台机器正在用的值：`UE_EDITOR_BACKEND=monolith`，模型 `deepseek-flash`，五个图开关、`UE_ALLOW_AI`、`UE_ALLOW_MONOLITH_WRITE` 都是 true，`UE_DEFAULT_SAVE` 和 `UE_DEFAULT_PIE` 都是 true。`.env` 不提交。键缺失时的代码缺省仍是 `official`、`deepseek-chat`、图开关 false、save/pie true。
-
-### 蓝图三次止损
-
-只在 `backend=monolith`，且动作是 `compile_blueprint`、`bind_blueprint`、`create_widget_blueprint`、`edit_widget_blueprint` 时，`agent/sequence.py` 的 `repair_blueprint` 对同一张蓝图、同一个目标最多修 3 次。一次尝试是：还不知道 action 才 discover，然后 describe、exec，再用 exec 结果复查。对应 `UE_ALLOW_*` 不是 true 时次数是 0，步骤写入 `Plan/`。第 3 次仍失败，错误含「已尝试 3 次，Monolith 不具备该能力」，不改连 8000，不换另一张蓝图。`compile_project` 和 `edit_cpp` 不占这 3 次。路径解析失败不计入尝试。`backend=official` 不走这 3 次。
-
-### 诊断句不扩动作表
-
-`agent/diagnose.py` 不叫模型、不写盘、不连编辑器。句子含「看看 / 检查 / 核对 / 是否有问题 / 有没有问题」，且不含「实现 / 新建 / 创建 / 修改 / 摆 / 放置」时，用原句或台账里的 ASCII token 去对源码里已声明的 Automation 过滤器。恰好一条，就收成现有的 `run_automation_test`。零条：该范围仍是缺口。多条：一扇暂停窗，只问一次过滤器全名，不预选。不收成 `implement_shooter` 或 `check_platform_hud`，也不往 `catalog.py` 加行。
+本仓库 `.env.example` 里未注释的项是这台机器正在用的值：`UE_EDITOR_BACKEND=monolith`、模型 `deepseek-flash`、五个图开关、`UE_ALLOW_AI`、`UE_ALLOW_MONOLITH_WRITE`、`UE_DEFAULT_SAVE`、`UE_DEFAULT_PIE` 都是 true。`.env` 不提交。键缺失时的代码缺省仍是 `official`、`deepseek-chat`、图开关 false、save/pie true。
 
 ### 做到哪
 
-`feature_list.json` 里仍是 pending 的三条：
+`feature_list.json` 里仍是 pending 的两条：
 
-- `patrol-presentation`：三个 `BlueprintImplementableEvent` 的表现接线仍由人绑。打开 `UE_ALLOW_AI` 不把这条改成 passed。步骤仍在 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`。2026-10-27 复核：`AIAgent.Enemy.Patrol` automation 实测绿（只验 C++ 半边）；monolith 图词表没有 BIE 覆写节点类型，这条 pending 无法再由自动化收窄
-- `editor-transaction`：没有编辑器 Transaction / Undo，属性回滚靠 `props.json`。
-- `level-assembly-persist`：整句平台跳跃还不能标成功。金币、平台、门、进度中枢已在 `L_NewTest`，HUD 由 C++ `UPlatformHUDWidget` 驱动。`umg-hud-exec`、`level-assembly`、`platform-automation`、`material-domain`、`umg-domain` 在清单里已是 done。
+- `patrol-presentation`：`ATestEnemy` 的巡逻、追击、近战是 C++ 状态机。`AIAgent.Enemy.Patrol` 在 monolith 上已有自动化证据（1 passed / 0 failed）。行为树已被这套状态机取代，不另建。`OnPatrol` / `OnChase` / `OnMeleeAttack` 的表现接线仍由人绑：monolith 词表没有覆写组件 `BlueprintImplementableEvent` 的节点。无骨架的 Actor 不做动画，受击表现等伤害链路。打开 `UE_ALLOW_AI` 不把这条改成 passed。步骤清单是 [`Plan/patrol-presentation.json`](Plan/patrol-presentation.json)（`BP_TestEnemy` 的 `OnPatrol` / `OnChase` / `OnMeleeAttack`、白色执行引脚、人要核的现象）；长说明仍是 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`。人签文件不改 `feature_list.json` 里这条的 `passed`。
+- `editor-transaction`：没有编辑器自己的 Transaction / Undo。失败时写回的是快照，不是 Undo。
 
-2026-10-29 新增一条 **done**：`fps-hud-umg`（整句「FPS 关卡加 UMG HUD」零模型落地，run `20261029-123907`）。
+`level-assembly-persist` 已是 done。证据 `data/runs/20261027/20261027-191740.md`：整句在 monolith 下从理解器跑到集成矩阵全过，五条 `editor_assert` 各绑自己的放置扇，关卡经 `list_dirty_packages` + `save_packages` 落盘。金币、平台、门、进度中枢在 `L_NewTest`，HUD 由 C++ `UPlatformHUDWidget` 驱动。已放进关卡的实例要读或改属性时，拆句转入 unresolved，不进执行窗口（见下节 partial）。
 
-### FPS HUD 整句（2026-10-29，零模型）
+### 已经钉住、后文旧句不再作数
 
-这一句（血条占位 100 / 子弹 / 手雷 / 载具名字·E 提示·时速）现在**不叫模型**：
+下面这些在离线检查里，进了 `.github/workflows/offline.yml`。和后文「仍然没有」里 10 月 27 日之前的句子冲突时，以这里为准。
 
-| 层 | 做法 |
-| --- | --- |
-| 拆句 | `agent/fps_hud.py: hud_windows` 直接给 5 扇固定因果链（`launch_editor → open_level → create_widget_blueprint → edit_widget_blueprint → check_fps_hud`），`plan_windows` 返回 `source=hud-rules`；`run_windows._needs_brief` 对这条来源跳过任务书人审门 |
-| 资产名 | 句子没点名 `WBP_` 时按域给确定默认名（FPS 表现词→`WBP_FpsHUD`、泛 HUD→`WBP_HUD`、其余→`WBP_UI`，目录 `/Game/UI`），不再死在「没有唯一的蓝图路径」 |
-| 建资产 | UserWidget 父类的 `create` 在 monolith 下改走 `ui.create_widget_blueprint`（`blueprint.create_blueprint` 只能产出普通 BP）；`set_parent`/`get_parent` 传包路径而不是裸名 |
-| 控件树 | `agent/fps_hud.py: build_fps_hud` 用 `ui.add_widget` + 锚点 + 占位文案 + `ui.compile_widget` + 复查六个名字落地；`repair_blueprint` 对 `create_widget_blueprint` / `edit_widget_blueprint` 不再 discover 猜 action |
-| 收口 | `check_fps_hud`（`sequence._check_fps_hud`）：六个合同控件名 + 父类 `FpsHUDWidget` + `AFpsPawn` 有 `CreateWidget`/`AddToViewport`，缺一条不通过 |
-| C++ | `UFpsHUDWidget` 六 `BindWidgetOptional` + 0.05s `Refresh`；`AFpsPawn::EnsureHud` 挂视口；`ASimpleVehiclePawn` 增 `VehicleDisplayName` / `GetSpeedUuPerSec` / `GetDriver` 并记 `LastSpeed` |
-
-离线护栏：`eval/check_fps_hud.py`（零模型拆句、依赖成链、模块入口可调用、判词/C++/布局三处控件名一致），已进 `offline.yml`。
-monolith 桥新增 11 个控件图原语映射；`BindToEventProperty` / `SetNamedSlotContent` / `GetWidgetClassInfo` 仍无对应 action，写在 `Plan/20261029-1240-FPSHUD与UMG桥后续升级.md`。
+- **条款绑定**：`eval/check_criteria_binding.py`。20261027-180955 的形状（四扇 `place_batch` 全败）下，内容条款保持 false。`launch_editor` 的 synthetic 判词只翻「证明窗口恰好只有它自己」的条款，翻不动放置条款。翻成 passed 时写下判词 `evidence_sha1`（只含 `ok`、`kind`、`window`、`summary`）；回放时印章对不上，条款回到 false。整句收尾是 `ok` / `partial` / `failed`，写进 run 记录的 `sentence`：有执行窗口失败而条款全过是 `failed`（退出码 1）；有未签 `manual` 是 `partial`（退出码 3）；非 manual 全过、没有失败窗口、没有未签 manual 才是 `ok`（退出码 0）。退出码 2 仍是有活心跳，不是 `partial`。模型文本不改 `passed`。`manual` 只由人写的 `data/attestations/<criterion_id>.json` 翻牌（`criterion_id`、`person`、`signed_at`、`evidence_path`、证据文件字节的 `evidence_sha1` 都要在，哈希不符保持 false）；`editor_assert` 等条款拒绝人签。
+- **动作 × 后端**：`eval/check_backend_coverage.py` 的 `COVERAGE`，对照 `core/monolith_bridge.py` 的 `MAPPED` / `UNSUPPORTED`。`place_batch`、`set_scalar_param`、`remove_batch`、`move_actor`、`open_level`、`implement_shooter`、`implement_grenade`、`create_level`、`create_widget_blueprint`、`edit_widget_blueprint` 都是 `both`。`partial` 只剩 `judge_pickup` 和 `set_pickable`：monolith 没有 `get_properties` / `set_properties`，这两行原因文字保持原样，也不编进 `MAPPED`。当前后端是 monolith 时，依赖这两条原语的窗口在拆句末尾丢掉，对应半句留在 `unresolved`，并在当次 `Plan/` 写一行：先清实例再放置，或改走官方后端。官方后端这两条仍可进窗口。`place_batch` 生成时写 props 的路径保留。映射外的原语带原因拒绝，不再是笼统的 `UE_EDITOR_BACKEND=monolith`。
+- **写前回滚**：`agent/prop_snapshot.py`，检查 `eval/check_write_rollback.py`。scalar 覆写前记旧值；`place_batch` 新建的 Actor 按名登记，失败时删掉唯一实例；同一实例登记两次只删一次；名字对上不是恰好一个就不删。每条快照带动作、目标 ref、逆操作、幂等键，方式是 `compensating`。同一幂等键只回滚一次。同一 ref 旧值不一致则都不做，写 `manual_intervention`。五类确定故障：写属性中途失败写回旧值；编译失败不消费快照；保存失败把关卡差异留在快照目录；逆操作连接失败写 `manual_intervention` 并不再做下一条；run 被 `sweep_orphan_runs` 改判 orphaned 后，续接先按快照逆序恢复，恢复失败则停。这是补偿，不代替 Undo。`editor-transaction` 仍是 pending。
+- **入口占用**：菜单 3 在打开重定向输入之前把 `UE_RAG_STDIN` 改名为 `.consumed`，改名失败就退出。`agent/run_guard.py` 做同一次占位；30 分钟无心跳的 `running` 改判 `orphaned`，不杀进程。有活心跳时菜单 2 和菜单 3 退出码 2，打印 `run_id`，不写事件。`start.bat 3 --force`（菜单 2 同样带 `--force`）才继续，并在被越过的 run 的事件里写 `run_start.forced_by`（本进程 pid 和该 `run_id`）。原文件不在、只剩 `.consumed`、且没有未过期心跳时，这次调用可以接着用它。菜单 2 不改名。
+- **两套写策略**：菜单的 `save` / `pie` 走 `config.run_policy("menu")`，`task_policy` 是它的薄包装，缺省 true，任务写了 `save: false` / `pie: false` 或 `--no-save` / `--no-pie` 才关。DSH 走 `config.run_policy("dsh")`，只读人写的 `data/dsh/session_task.json`，文件没有就拒绝写。两套剖面的 bool 不必相等。图写（蓝图、材质、UMG、动画、Niagara）由 `core/graph_write_policy.py` 一处判定。编辑器写锁在 `core/editor_lock.py`，锁文件仍是 `data/locks/editor.lock`。DSH 和菜单 2/3 的写共用这一把，官方后端和 monolith 互相挡住：并发一个成功一个 busy，失败文本带持有者 pid、backend、`run_id`；900 秒无心跳或伪造 pid 算过期；只读不占锁（`eval/check_dsh_lock.py`）。
+- **求解开关**：代码缺省 false（环境变量没写就是关）。本仓库 `.env.example` 写成 true，表示这台机器开着。两句都对，说的不是同一个字段。
 
 ### 入口
 
-`start.bat` 四条：1 `chat.py`，2 `run_multi.py`，3 `run_windows.py`，4 `--resume latest`。菜单 2 和 3 共用 `plan_windows`。一张 LangGraph。DSH 仍是外壳，不跑这张图。写策略仍只读人写的 `data/dsh/session_task.json`。
+`start.bat` 四条：1 `chat.py`，2 `run_multi.py`，3 `run_windows.py`，4 `--resume latest`。菜单 2 和 3 共用 `plan_windows`，一张 LangGraph。DSH 仍是外壳，不跑这张图；写策略只读人写的 `data/dsh/session_task.json`。动作表的单一声明源是 `agent/actions.py`（清单不再抄在这里），`integrate_verify` 与 `dispose_residual` 只由代码追加。`apply_spec` 写完源码强制编译（`agent/build_error.py`），错误原文进下一轮，编译轮次 ≤3，执行面每次真编译都落 `data/last_cpp_build.json`。
 
-动作表的单一声明源是 `agent/actions.py`（2026-10-28 起）：`catalog.py` 的 `CATALOG` / `DIRECT_ACTIONS` / `READ_ONLY_ACTIONS` / `GRAPH_ACTIONS` / `EDITOR_LOCK_ACTIONS` / `_VERIFY`、`harness.py` 的 `_KIND_BY_ACTION`、`brief.py` 的估时表、`check_catalog_parity.py` 的代码专用白名单都由它推导，加动作只改那一份。规划者能选的包括：`launch_editor`、`compile_project`、`compile_blueprint`、`edit_cpp`、`bind_blueprint`、`create_level`、`open_level`、`place_actor`、`place_batch`、`remove_batch`、`judge_pickup`、`set_pickable`、`move_actor`、`query_actor`、`set_scalar_param`、`query_material`、`create_widget_blueprint`、`edit_widget_blueprint`、`run_automation_test`、`implement_shooter`、`implement_grenade`、`check_platform_hud`、`check_fps_hud`。`integrate_verify` 与 `dispose_residual` 只由代码追加。
+### 门只认整句（2026-11-11 起）
 
-`apply_spec` 写完源码就强制编译（`agent/build_error.py`）：失败时把 `get_build_error` 的错误原文当 fix 上下文进下一轮，编译轮次 ≤3，烧尽就带着原文诚实失败。执行面每次真编译都落 `data/last_cpp_build.json`，网关的 `get_build_error` 读同一份。
+拆句顺序不变：L0 手写规则 → FPS HUD 规则 → 已学句式 → L1 理解器。变的是门的口径。`rules` / `hud-rules` / `learned` 命中前都要整句盖得住：有半句对不上这条路径声明的动作就返回空，交回后面的模型——不把整句领走后让半句蒸发（纯 FPS HUD 整句仍是 `hud-rules` 五扇链零模型；「加血条子弹，同时加滑铲」这类混句不再被它领走）。闸门落点不同：`rules` 经 `_rules_cover` 过 `_clauses_accounted`，`learned` 自己过一次；`hud-rules` 例外——它的分支直接 `return`，不在 `plan_windows` 里过闸门，hud-rules 靠自身整句匹配：`_clauses_accounted` 在 `agent/fps_hud.py` 的 `hud_windows` 里，认不住整句就返回空、交回 L1/求解。这条直接 `return` 是有意的，不要给 hud-rules 补闸门。L1 的 goals 盖不住原句（`unresolved` 非空，或半句没人接）时，不再叫规划者重点一遍动作表，也不拿残缺 goals 直接执行：`UE_SOLVER_ENABLED` 开着就进求解兜底（`plan_windows` 标 `solver-fallback`），关着停在缺口、`unresolved` 进任务书等人表态。人审留一次：求解方案预演（只读）里有写 C++ 或改关卡才出任务书，任务书引用这份方案，不再要求生成器用动作表重写一遍。`run_windows._needs_brief` 只对「窗口已经盖住整句」的确定性来源跳过人审门。
 
-零窗口范围补窗失败后，若 `UE_SOLVER_ENABLED=true`（缺省 false；`.env` 或进程环境变量都行，`.env` 优先），由代码补一扇受控求解扇 `solve`（`agent/solver.py`）：monolith discover 盘点（editor 永远在盘点内，action 名全量保留，截断只对超长正文；**清单先过写闸**——任务旗标 / `UE_ALLOW_*` 没放行的原语（如未放行的 `editor.run_python`）不进清单，规划者看不见就不编，`UE_ALLOW_PYTHON` 只给任务上没写 `allow_python` 键的路径当缺省，显式 false 永远优先；单个 namespace discover 失败只记错不中断，全部失败才算盘点失败）→ 本地源码定位 `locate_code`（`UE_SOURCE_ROOT` 下 .h/.cpp 按需求词与中文域词映射扫 file:line，零预算）→ `list_automation_tests` 拉项目真测试前缀 → 模型出步骤规格（只准用盘点出的原语、`patch` 或 apply_spec；**`patch` 对已有源文件做一处逐字替换**（old 全文唯一），物化成整文件内容复用 apply_spec 管线；收口过滤器只能取真测试清单里的前缀，编造的整条丢）→ 逐原语执行（**执行前先过写闸预检**：被拒调用不发出、不重试、不烧预算，原文带回；其余遇错最多重试一次）→ apply_spec/patch 就地「写码→编译→编辑器回连」（编译裁判先关编辑器，成败都回连；方案提示编译重启后第一步 load_level 回目标关卡）→ automation 判据收口，没有判据就诚实失败。**两条假成功守卫**：原句要求改变而方案全是只读步骤（开关卡/保存/编译/观察类不算改动）→ `read_only_plan` 诚实失败；方案有写码步骤但一次编译都没跑 → `write_skipped` 诚实失败——旧测试通过 ≠ 完成（20261028-185716/190722/191105 三次假成功钉出来的）。**参数形状校准**：方案定稿后对 ≤4 个用到的原语 `describe` 取参数形状，形状对不上花一次模型调用修 args（盘点只有 action 名，参数名靠猜必翻车，20261028-190109）。`describe` 先查 `data/capability_surface.json` 里同后端指纹的 params，命中不占预算；未命中与 discover、`list_automation_tests` 记入 `meta_calls`（缺省 12，`UE_SOLVER_META_CALLS`），不再占用执行用的编辑器次数。方案省略收口过滤器时，收口前最多再花 1 次模型调用从真测试清单补选，编造的整条丢，仍没有就 `no_criteria`。补扇动作的声明能力对不上该范围未覆盖交付就不补；补上的扇在 run md 里标「来源：补扇」。台账 `done` 要求该范围有改动证据（`spec_files` 且编译裁判 ok，或写类编辑器裁判 `{ok, kind}`），否则记 `partial`。`read_only_plan` 收进失败模式影子，改变动词词表不在失败时自动扩。`start.bat` 在重定向之前把 `UE_RAG_STDIN` 改名为 `.consumed` 再交给 `run_windows`（文件已被打开时 Windows 改不了名）；第二个进程以「输入已被另一个进程占用」退出。run 记录写 pid 与心跳；REPL 启动时把超过 30 分钟无心跳的 `running` 改判 `orphaned`，并在 md 写「此 run 无主死亡，改动证据需人工核对」。`start.bat` 菜单 3 发现仍在心跳的 run 先问人，不自动杀进程。**快路径同款兜底**：理解器推不出 goal、规划者只留暂停窗时，求解开着也合成一扇 solve 扇（`run_windows._run_query`），不再死在「规划者没有写出窗口清单」。预算闸门：编辑器 ≤8 次、编译 ≤3 轮、模型 ≤6 次（`UE_SOLVER_*` 可调），namespace 白名单缺省 `editor,mesh,niagara,blueprint,material`（monolith 没有 `asset` namespace）；烧尽降级回能力缺口口径。编译有跨进程互斥锁（`data/build.lock`，UBT 并行必崩）。轨迹落 `data/distill/solver_trajectories.jsonl`（含 `plan_steps` 方案步骤摘要）；成功轨迹蒸馏成 learned_skills 影子条目和 lexicon 提名行（人审通过才落表），失败轨迹进失败模式库影子。能力面视图：`pipelines/export_capability_surface.py` 导出 `data/capability_surface.json`，`eval/check_capability_surface.py` 对账（执行器有、规划者看不见 → 自动提名候选；声明了执行器没有 → 报错）。
+### 求解扇预算
 
-覆盖对账（2026-10-28 起，`agent/brief.py`）：范围有窗 ≠ 交付被覆盖——逐条交付对窗口文本与动作声明能力做字二元组重叠对账，没人接住的交付项：求解开着就并进那一扇 solve（一个任务书最多一扇 solve，全部未覆盖交付合并，依赖取全部相关范围的声明窗；多扇各自写码会撞重复类名并互抢编译锁）；求解关着且人审没表态 → `partial_gap`，集成矩阵「交付验收」判 False，不许静默丢；人审已表态 → 按能力缺口口径走「已确认不执行」。**验收类交付**（检查/验证/结论类）由验收类窗口（run_automation_test / integrate_verify / editor_assert）执行即算接住，字二元组对不上不算缺口。物化第二遍强制「依赖只许引用先出现的窗口」：生成器写出的自引用/后向引用（依赖环，20261028-191514 的 W1→W2→W1）在进调度前砍掉并打印，环不再卡死整个 run。
+`UE_SOLVER_ENABLED` 缺省 false，人开了才走。预算闸门缺省：编辑器 ≤8 次、元数据 ≤12 次、编译 ≤3 轮、模型 ≤6 次（`UE_SOLVER_*` 可调）；namespace 白名单缺省 `editor,mesh,niagara,blueprint,material`。烧完或闸门拒绝就降级回能力缺口，不假成功。内部守卫（`read_only_plan` / `write_skipped` / 参数形状校准 / 写闸预检）见 `agent/solver.py` 文件头，这里不复述。
 
-保存和 PIE：任务没写时跟随 `UE_DEFAULT_SAVE` / `UE_DEFAULT_PIE`，两边缺省都是 true。`call_mcp_tool.py` 省略 `--save` / `--pie` 同样跟随缺省；`--no-save` / `--no-pie` 才拒绝。
+保存和 PIE：任务没写时跟随 `UE_DEFAULT_SAVE` / `UE_DEFAULT_PIE`，两边缺省都是 true；`--no-save` / `--no-pie` 才拒绝。要求关卡已存在的动作（`open_level`、`implement_shooter`、`implement_grenade`）认裸名昵称：裸名按尾号数字对现有关卡做唯一匹配（`level3` → `L_NewTest3`，带 `alias_note`），对上多个就暂停问全名；`create_level` 不做这个匹配。技能正文 24 份，在 `.codex/skills`。
 
-要求关卡已存在的动作（`open_level`、`implement_shooter`、`implement_grenade`）认裸名昵称：解析出的包在磁盘上不存在、且原词是不带 `/Game` 路径、不以 `L_` 开头的裸名时，按尾号数字对现有关卡做唯一匹配（`level3` → `L_NewTest3`，带 `alias_note`）；对上多个就暂停问全名，对不上维持原解析、执行层诚实失败。`create_level` 不做这个匹配——新建关卡本来就允许是不存在的名字。
+### 记分、健康与换机
 
-技能正文 24 份，在 `.codex/skills`，含 `ue-monolith-backend-skill` 和四份 DSH 技能。
+分数只由 `RAG/ue-rag/eval/check_scorecard.py` 写入 `data/harness/scorecard.json`，终端打一行总分和缺口。没有哈希相符的人签时 A 停在 7。`eval/bench_manifest.json` 里冻结的 10 句不满各 3 轮时 B 停在 16。`skipped` 不进分母，也不算成功。`eval/run_bench.py --live` 在完成记录不足 30 条时不打印百分比，退出码 2。脚本自己存在不加分。对外分数以这次打印的为准。
+
+本机把 `.github/workflows/offline.yml` 里已有的 `python eval/check_*.py` 串起来：`python eval/check_all.py`，摘要在 `data/harness/check_all.json`。CI 仍逐条列出，触发方式不变。
+
+`/api/health` 在 `ok`、`model`、`mcp_url`、`mcp_up` 之外还有 `backend`、`index_present`、`circuit_closed`、`checkpoint_writable`、`disk_free_mb`。后五项各带 `ok` 和 `reason`。不调用模型，不往编辑器写。`mcp_up` 仍是原来的探活。
+
+换机用 `RAG/ue-rag/shortcuts/setup.ps1`：找到 Python 3.12，建 `.venv`，装依赖。`.env` 没有才从 `.env.example` 复制，已有则不动。脚本不自己跑那几条收尾命令，只在末尾打印并列出下一步清单：`python eval/check_all.py`、`shortcuts/ingest.bat`、`AIAgentProject/start.bat`，由人按顺序跑。不下载 UE。
+
+成本按 `caller` 分列。没有行的入口不填 0。`caller=dsh` 仍是没有行就省略那一节。`promote_from_route` 的 `source_run` 为空时停在 shadow，不进已提升路由。
 
 ## 沿革
 
@@ -88,12 +82,12 @@ Cursor 里按 `AGENTS.md` 说话的那条还在。人确认 `.cursor/memory/plan
 | | 普通对话 | 单循环 | 多窗口 |
 | --- | --- | --- | --- |
 | 入口 | `start.bat` 选 1，或 `python agent/chat.py` | `start.bat` 选 2，或 `python agent/run_multi.py` | `start.bat` 选 3，或 `python agent/run_windows.py`。默认带终端面板，`--plain` 纯文本；菜单 4 直接续接最近一个没跑完的 run，REPL 里 `:resume latest`（或 `:resume <run_id>`）同效 |
-| 谁规划 | 检索一次后直接回答 | 菜单 2 的 `run_multi` 和菜单 3 共用 `plan_windows`。手写规则每一步都能落地时仍是 L0，直接跑；弱命中或未命中走 L1 理解器，理解器失败再退回手写步骤。离线检查仍调用 `plan_sequence()`，那条不叫模型 | 分层规划（2026-10-15 起）：L0 快路径离线零模型——手写规则强命中（每一步都能落地才强；拆出任何暂停扇算弱命中），或已提升的 `data/skills/learned_skills.json`，再不行才读 `agent/learned_routes.json` 同构句式，直接走 L2 归地；句里有「实现/逻辑/随机/功能/需求/行为」这类需求说法而没有任何改码扇接住时也算弱命中（181645 的教训：需求半句不许静默丢掉、测试不许替没实现的需求报成功）。L0 不中先过 L1 理解器（`agent/understand.py`，一次 `UE_LLM_MODEL` 调用，只从动作目录选动作、填槽位原始 token、推不出的写进 unresolved），产出经 `agent/intent.py` 验收后由 `agent/grounding.py` 归地：asset 槽位索引唯一命中直连，miss 且父类可推自动插「创建蓝图」前置扇，推不出只问一次 `r`，问法来自 `clarify_policy.json`。L1 说不出合法意图才回退老规划者（重试上限 1 次）。表外动作记成候选，不执行。大任务先出任务书（超过 3 扇 / 新功能重构 / 理解器有 unresolved），人审通过才执行，范围窗口继承 L2 归地候选。任务书「尚未完成清单」读台账、未提升技能和 unresolved |
+| 谁规划 | 检索一次后直接回答 | 菜单 2 与菜单 3 共用 `plan_windows`。口径以「当前系统」的「门只认整句」为准：规则、HUD 链、已学句式先看是否盖住整句，盖不住就交回模型。离线检查仍调用 `plan_sequence()`，那条不叫模型 | 同左。L1 的 goals 盖不住原句时不再叫规划者重写一遍：求解开着进求解扇，关着停在缺口。归地、任务书人审、表外动作只记候选，仍按「当前系统」那一节 |
 | 改工程 | 不改 | 不再每步输入 `y`。做不了或失败时暂停，可以补一次路径 | 每扇新的 `thread_id`。消息是这一扇的任务句；有上一扇交接文件时，前面再附一份短 JSON（`unmet`、证据种类、`next`），不附工具正文。写编辑器或 `cpp_build` 的窗口过编辑器闸门串行，只读裁决和只读契约动作并行 |
 | 验证 | 不编译 | 和以前的多 Agent 相同。模型不能自己宣布成功 | 集成不叫模型。某一扇失败只重试这一扇。任务书确认后代码追加 `integrate_verify` 跑矩阵验收 |
 | 记录 | 不写 trace。人在 `s/c/r` 里选择时，往 `data/events/<同一次 run id>.jsonl` 追加 `confirm` | 每步写在 `data/runs/YYYYMMDD/`（按日期分目录，老 run 原平铺兼容读写）。图内部 trace 仍在 `data/traces/*.jsonl` | 同一目录，按窗口分节，带上依赖和 `{ok, summary}`。另有 `data/runs/YYYYMMDD/<run_id>.json` 机读状态、`data/events/<run_id>.jsonl` 事件流、`data/archive/<run_id>/` 归档 |
 
-目标仍是 [`周计划.md`](周计划.md) 第 2.1 节那句验收：一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人。检索、改 C++、编译、读错误、再改、再测由闭环做。行为树、动画和受击表现由人在编辑器里绑，对应合同里的 `manual` 条款，模型文本改不了 `passed`。这句话的 Automation 条款现在会生成，过滤器是 `AIAgent.Enemy.Patrol`；菜单开跑时代码再追加一扇只读 `run_automation_test`，不因此把 `pie` 设成 true。过滤器失败时该条款保持 `passed: false`。自动条款都过了、人工条款还在时，整句记「部分完成」。C++ 半边是 `UTestEnemyPatrolComponent` 和只负责挂载的 `ATestEnemy`：绕出生点巡逻，发现玩家后追击，近距离调用 `OnMeleeAttack`。三个事件都是 `BlueprintImplementableEvent`，图由人接。窄闭环已经能对三条固定任务做编译和断言。巡逻这条的读数画面在 `RAG/ue-rag/eval/reports/demo-c-patrol-20261016-124807.mp4`，文字来自 trace `demo-c-patrol-20261016-124807.jsonl`。
+目标仍是 [`周计划.md`](周计划.md) 第 2.1 节那句验收：一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人。检索、改 C++、编译、读错误、再改、再测由闭环做。C++ 半边已经是状态机：`UTestEnemyPatrolComponent` 和 `ATestEnemy` 绕出生点巡逻，发现玩家后追击，近距离调用 `OnMeleeAttack`。`AIAgent.Enemy.Patrol` 自动化已通过。行为树不再建。`OnPatrol` / `OnChase` / `OnMeleeAttack` 仍是 `BlueprintImplementableEvent`，表现接线由人绑，对应合同里的 `manual` 条款，模型文本改不了 `passed`。菜单开跑时代码可以追加一扇只读 `run_automation_test`，不因此把 `pie` 设成 true。自动条款过了、人工条款还在时，整句记「部分完成」。无骨架不做动画，受击表现等伤害链路。早期读数画面在 `RAG/ue-rag/eval/reports/demo-c-patrol-20261016-124807.mp4`。
 
 `chat.py` 的 `answer`、`nodes.py` 的 `plan_node`、`supervise.py` 的 `_from_model` 和理解器都经 `RAG/ue-rag/core/llm_call.py` 调用模型。模型名每次读 `UE_LLM_MODEL`。键缺失时是 `deepseek-chat`。本仓库 `.env.example` 写的是 `deepseek-flash`。供应商和 `base_url` 没有改。每次调用把模型名、耗时、prompt token、completion token、错误写进 `data/costs.jsonl`。响应里如果有 `prompt_cache_hit_tokens`、`prompt_cache_miss_tokens` 或 `cached_tokens`，一并写下；没有就空着，不估算。trace 里同一次 `plan` 也会带上这些字段。
 
@@ -101,7 +95,7 @@ Cursor 里按 `AGENTS.md` 说话的那条还在。人确认 `.cursor/memory/plan
 
 菜单 2 是单循环，菜单 3 才是多窗口。两边都还是原来那张 LangGraph，没有第二张业务图。图的边没有加。模型不能自己宣布成功。路径对不上仍然不猜。
 
-菜单 2 现在和菜单 3 共用 `plan_windows`、动作表和编辑器执行器。手写规则仍然是 L0 种子：每一步都能落地就直接跑。弱命中或未命中才走理解器；理解器说不出合法意图时，先退回这些手写步骤，再不行才是老规划者。`plan_sequence()` 本身仍只走手写规则和已学句式，离线检查用它，不叫模型。每一步还是同一张图。
+菜单 2 现在和菜单 3 共用 `plan_windows`、动作表和编辑器执行器。手写规则、HUD 链、已学句式只认盖得住的整句；盖不住的半句交回模型。理解器的 goals 盖不住原句时，求解开着进求解扇，关着停在缺口，不把残句交给老规划者执行。`plan_sequence()` 本身仍只走手写规则和已学句式，离线检查用它，不叫模型。每一步还是同一张图。
 
 菜单 3 的拆句分四层（2026-10-15 起）：模型在前只做理解和选动作，代码在中做归地和裁判，跑赢后沉淀成快路径。手写规则不删，退役成种子和 L1 失联时的兜底。
 
@@ -142,7 +136,7 @@ L3 学习回写 + 集成（都不叫模型）
   自动条款都通过、仍有 manual → 整句记「部分完成」
 ```
 
-动作表以「当前系统」那一节为准，单一声明源是 `agent/actions.py`。schema 用 `contract/tools.json` 里已有的那一份，不读 `ue_mcp_index.json`。`query_actor` 和 `run_automation_test` 不在 `allow_writes` 里也能读，写前缀规则没有放宽。其余四个契约工具（`query_blueprint`、`find_asset`、`build_project`、`get_build_error`）不进动作表；`get_build_error` 读的 `data/last_cpp_build.json` 现在由执行面的每次真编译共同落盘（2026-10-28 起）。官方 830 个工具只在 `backend=official` 的扫描路径；`backend=monolith` 走 discover / describe / exec。表外动作暂停，记成候选，不执行，也不写进快路径。诊断句归地失败也不为此加行。人审并补上验证之后才算入表。可实现指槽位已经唯一，不是指场景里一定有实例，也不是指编译已经通过。场景里没有实例、编译失败、裁决是「不能」，都不删已经记下的句式。人要作废就删 `learned_skills.json` 里的那一条；旧的 `learned_routes.json` 仍可单独删。
+动作表的单一声明源是 `agent/actions.py`（清单不再抄进「当前系统」）。schema 用 `contract/tools.json` 里已有的那一份，不读 `ue_mcp_index.json`。`query_actor` 和 `run_automation_test` 不在 `allow_writes` 里也能读，写前缀规则没有放宽。其余四个契约工具（`query_blueprint`、`find_asset`、`build_project`、`get_build_error`）不进动作表；`get_build_error` 读的 `data/last_cpp_build.json` 现在由执行面的每次真编译共同落盘（2026-10-28 起）。官方 830 个工具只在 `backend=official` 的扫描路径；`backend=monolith` 走 discover / describe / exec。表外动作暂停，记成候选，不执行，也不写进快路径。诊断句归地失败也不为此加行。人审并补上验证之后才算入表。可实现指槽位已经唯一，不是指场景里一定有实例，也不是指编译已经通过。场景里没有实例、编译失败、裁决是「不能」，都不删已经记下的句式。人要作废就删 `learned_skills.json` 里的那一条；旧的 `learned_routes.json` 仍可单独删。
 
 拆句结果上的 `criteria[]` 由代码写，不由模型写。每条有 `id`、`text`、`evidence_kind`、`passed`。`evidence_kind` 只允许 `cpp_build`、`blueprint_compile`、`editor_assert`、`automation`、`manual`，开始时 `passed` 全是 false。`observe` 只在 `judge.ok` 且 `judge.kind` 等于 `evidence_kind` 时把对应条款改成 true。`manual` 保持 false。模型回复里的「已完成」不进这张表。「编译工程」只让 `cpp_build` 那条有机会通过。句子里同时有「巡逻」和敌人（`敌人` / `Enemy` / `TestEnemy`）时，代码追加 `automation` 条款，过滤器 `AIAgent.Enemy.Patrol`，并追加一条留给 `Plan/` 的 `manual` 条款。已有离线拆句期望看的是动作序列，所以这一扇只在菜单执行时追加，不改 `plan_windows` 交给语料检查的那张表。句里写了测试时，原来的 PIE 扇仍按原规则出现；巡逻 Automation 自己的 `pie` 保持 false。
 
@@ -345,7 +339,7 @@ C++ 不让模型直接写文件。
 
 ## 回滚
 
-源码用 `data/snapshots/<run_id>/<window_id>/` 的字节快照还原。`set_pickable` 和 `move_actor` 另把写入前的 `bPickable`、`Tags` 或位置记在 `data/snapshots/<run_id>/props.json`。这一扇失败且任务没有 `keep_source` 时写回这些字段，写回后按任务策略保存关卡（缺省保存）。同一 `ref` 记了多次就不写回。索引里仍然没有 Transaction / Undo 工具，这条快照不代替编辑器事务。
+源码用 `data/snapshots/<run_id>/<window_id>/` 的字节快照还原。编辑器侧的写前快照在 `agent/prop_snapshot.py`：scalar 记旧值并写回；`place_batch` 新建的 Actor 按名登记，恢复时只删唯一实例；`set_pickable` 和 `move_actor` 把写入前的 `bPickable`、`Tags` 或位置记在 `data/snapshots/<run_id>/props.json`。每条记录带动作、目标 ref、逆操作、幂等键，方式是 `compensating`。这一扇失败且任务没有 `keep_source` 时写回，写回后按任务策略保存关卡（缺省保存）。同一幂等键只回滚一次；同一 `ref` 旧值不一致则都不做，并写 `manual_intervention`。新建名单里同一实例记两次也只删一次。编译失败不消费快照；保存失败把关卡差异留在快照目录。逆操作连接失败就停，不再做下一条。被改判 orphaned 的 run，续接前先按快照逆序恢复。索引里仍然没有 Transaction / Undo 工具，这些快照不代替编辑器事务。`editor-transaction` 因此仍是 pending。
 
 ## 记忆
 
@@ -647,14 +641,14 @@ python eval/check_dsh_bridge.py
 
 机器可读副本是 [`RAG/ue-rag/data/harness/feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json)，`status` 冲突时以 JSON 为准。
 
-这些挡在「任意一句话生成一个会巡逻的敌人」前面，不挡上面三条窄任务，也不挡已经编译过的 `ATestEnemy`：
+这些挡在「任意一句话生成一个会巡逻的敌人」前面的，是表现接线，不是 C++ 半边，也不挡已经跑通的窄任务：
 
-- `patrol-presentation` 仍是第一条 pending。C++ 有巡逻、追击和近战事件，合同里有一条默认失败的 `AIAgent.Enemy.Patrol`。三个 `BlueprintImplementableEvent` 不自动连线。`.env.example` 里 `UE_ALLOW_AI` 已经是 true，这条仍不因此改成 passed。自动条款过了、人工条款还在，整句是「部分完成」。步骤仍在 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`
-- `backend=monolith` 且对应写开关为 true 时，蓝图类动作最多试 3 次，不保证成功。第 3 次失败就停，不改连 8000。开关不是 true 时次数是 0，步骤写入 `Plan/`。本轮没有改三个近战事件的图
-- 平台跳跃的 `material-domain`、`umg-domain`、`platform-automation`、`level-assembly`、`umg-hud-exec` 在 `feature_list.json` 里已是 done。整句仍不能标成功：`level-assembly-persist` 还是 pending。`check_platform_hud` 只核对 `WBP_HUD` 里有没有 `txt_CoinCount`、`txt_Timer`、`txt_Clear`、`txt_Fail`
-- 交叉编码器重排、换 Embedding、Docker。观测页是 `report.py` 从已有 trace 写出的静态 HTML，不是常驻网站
-- `backend=monolith` 时场景/资产动作家族（`place_batch`、`set_scalar_param`、`remove_batch`、`judge_pickup`、`move_actor`、`set_pickable` 等）仍直连 official 入口被拒——10-26 切后端只迁移了蓝图类动作与 `open_level`/`implement_shooter`。这些扇在 monolith 下会失败，错误原文是 `UE_EDITOR_BACKEND=monolith`；20261027-180955 的整句 run 已实证。monolith 适配与「动作 × 后端」覆盖矩阵检查是 2026-10-27 升级计划的 U3a，排在下一次整句 run 之前
-- 合同级条款翻牌还有假通过洞：理解器自由条款被 kind 宽绑定后，`launch_editor` 的 `editor_assert` 判词能把内容条款翻绿（20261021-195220 教训换入口重现，20261027-180955 实证：窗口全败、条款全过）。收窄方案是升级计划的 U3b；U3b 修好之前，整句 run 的「成功」不可信
+- `patrol-presentation` 仍是第一条 pending。C++ 状态机已编译，`AIAgent.Enemy.Patrol` 自动化已通过。`OnPatrol` / `OnChase` / `OnMeleeAttack` 不自动连线。`.env.example` 里 `UE_ALLOW_AI` 已经是 true，这条仍不因此改成 passed。自动条款过了、人工条款还在，整句是「部分完成」。步骤仍在 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`
+- `backend=monolith` 且对应写开关为 true 时，蓝图类动作最多试 3 次，不保证成功。第 3 次失败就停，不改连 8000。开关不是 true 时次数是 0，步骤写入 `Plan/`。表现接线的三个事件不在这 3 次里
+- 平台跳跃的 `material-domain`、`umg-domain`、`platform-automation`、`level-assembly`、`umg-hud-exec`、`level-assembly-persist` 在 `feature_list.json` 里已是 done。整句证据是 `data/runs/20261027/20261027-191740.md`。`check_platform_hud` 核对控件名和父类 `PlatformHUDWidget`。已存在实例的属性读写见下一条
+- 交叉编码器重排、换 Embedding、Docker。观测页是 `report.py` 从已有 trace 写出的静态 HTML，不是常驻网站。`data/harness/scoreboard.json` 当前是 26 个任务、24 个 ok、每个成功约 126k prompt tokens；DSH 对照列仍空
+- monolith 没有 `get_properties` / `set_properties`。`judge_pickup` 与 `set_pickable` 在覆盖矩阵里是 `partial`：裁决读不到实例属性，`bPickable` 写不上（标签可写）。已放进关卡的实例因此不能复读或重写 props；`place_batch` 在生成当时写 props 可以。其余 CATALOG 动作是 `both`。20261027-180955 里「场景动作直连 official 被拒」是修桥之前的失败，不是当前路径
+- 20261027-180955 的合同假通过（窗口全败、条款被 `launch_editor` 翻绿）已收进 `eval/check_criteria_binding.py`。内容条款绑到自己的扇。`manual` 仍不能由模型文本翻牌
 - 关卡和全量资产仍要关编辑器跑 `asset.bat`。编辑器开着时 `refresh_editor_readonly.py` 可以给已有 Actor 标上快照，并用 `find_assets` 补 `/Game` 里还没有的资产卡片。`find_actors` 只返回 `refPath`，不带回坐标，所以不会把快照数字改成当时的实时位置
 - 把 `--query` 设成 Cursor 里每句话的默认动作
 - 编辑器自己的 Transaction / Undo。写属性失败时写回的是 `props.json` 里那几个字段，不是编辑器事务。索引里仍然没有 Undo 工具，结论仍见 `eval/reports/20261016-171408-cancel.md`
@@ -683,11 +677,13 @@ python eval/check_dsh_bridge.py
 | `UE_ALLOW_NIAGARA` | `false`。`true` 才允许改 Niagara。两条后端都生效 |
 | `UE_ALLOW_AI` | `false`。只在 `monolith` 时放行 `ai` 的非只读 action |
 | `UE_ALLOW_MONOLITH_WRITE` | `false`。只在 `monolith` 时放行其余命名空间的非只读 action |
+| `UE_ALLOW_PYTHON` | `false`。`true` 才允许 `editor.run_python`（编辑器内 Python，万能但有越权面）。任务上显式写 `allow_python: false` 的仍然拒绝，这个开关只给任务上没写这个键的路径当缺省 |
 | `UE_EDITOR_BACKEND` | `official`。`monolith` 时编辑器走 9316，不回退 8000 |
 | `UE_MONOLITH_URL` | `http://127.0.0.1:9316/mcp` |
 | `UE_MONOLITH_ROOT` | `E:\UEProject\AIWork\RAG\monolith-master` |
 | `UE_DEFAULT_SAVE` | `true`。任务没写 `save` 时是否保存关卡 |
 | `UE_DEFAULT_PIE` | `true`。任务没写 `pie` 时是否允许进 PIE |
+| `UE_SOLVER_ENABLED` | `false`。没写就是关。本仓库 `.env.example` 写成未注释的 `true`，那是这台机器的值，不是代码缺省 |
 | `UE_LLM_MODEL` | `deepseek-chat`。空着也用这个名字 |
 | `UE_DISTILL_TEACHER` | 空。设成 `1` 才在非 dry-run 的蒸馏里叫现有模型，而且只写 `candidates.jsonl` |
 | `DEEPSEEK_API_KEY` | 空。必须自己填 |

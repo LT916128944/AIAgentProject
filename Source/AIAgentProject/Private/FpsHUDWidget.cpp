@@ -137,11 +137,13 @@ void UFpsHUDWidget::Refresh()
 	{
 		SetTextSafe(txt_Ammo, FString::Printf(TEXT("%d"), Fps->Ammo));
 		SetTextSafe(txt_Grenade, FString::Printf(TEXT("%d"), Fps->GrenadeCount));
+		SetTextSafe(txt_RocketAmmo, Fps->GetRocketAmmoText().ToString());
 	}
 	else
 	{
 		SetTextSafe(txt_Ammo, TEXT("--"));
 		SetTextSafe(txt_Grenade, TEXT("--"));
+		SetTextSafe(txt_RocketAmmo, TEXT("--"));
 	}
 
 	// 右中部载具三行：名字、上下车提示、时速。

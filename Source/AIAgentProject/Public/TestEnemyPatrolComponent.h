@@ -4,6 +4,13 @@
 #include "Components/ActorComponent.h"
 #include "TestEnemyPatrolComponent.generated.h"
 
+// 表现事件的可绑定版本。BlueprintImplementableEvent 只能由声明它的类自己实现；
+// 事件声明在组件上，挂在 Actor 上的该组件事件 Actor 蓝图接不到。委托让 BP_TestEnemy
+// 能在自己的 EventGraph 里绑（Bind Event to OnPatrolDyn）。
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FTestEnemyPatrolSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FTestEnemyChaseSignature);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FTestEnemyMeleeSignature);
+
 /**
  * 敌人巡逻组件。绕出生点巡逻，发现玩家后追击，进入近战距离时通知蓝图。
  * 巡逻 追击 近战
@@ -59,6 +66,18 @@ public:
     // 近战攻击，图由人接。不造成伤害，不播动画
     UFUNCTION(BlueprintImplementableEvent, Category = "Test")
     void OnMeleeAttack();
+
+    // ===== Actor 蓝图可绑定的表现口 =====
+    // 组件自己实现的蓝图（组件蓝图）绑上面的 BlueprintImplementableEvent；
+    // 挂该组件的 Actor 蓝图（如 BP_TestEnemy）绑下面这三个委托。
+    UPROPERTY(BlueprintAssignable, Category = "Test")
+    FTestEnemyPatrolSignature OnPatrolDyn;
+
+    UPROPERTY(BlueprintAssignable, Category = "Test")
+    FTestEnemyChaseSignature OnChaseDyn;
+
+    UPROPERTY(BlueprintAssignable, Category = "Test")
+    FTestEnemyMeleeSignature OnMeleeAttackDyn;
 
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 

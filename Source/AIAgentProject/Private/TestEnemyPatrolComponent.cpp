@@ -36,6 +36,7 @@ void UTestEnemyPatrolComponent::StartPatrol()
     PatrolAngle = 0.f;
     PickPatrolTarget();
     OnPatrol();
+    OnPatrolDyn.Broadcast();
 }
 
 void UTestEnemyPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -61,6 +62,7 @@ void UTestEnemyPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickTy
                 LastAttackTime = Now;
                 MeleeAttackCount++;
                 OnMeleeAttack();
+                OnMeleeAttackDyn.Broadcast();
             }
             return;
         }
@@ -70,6 +72,7 @@ void UTestEnemyPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickTy
             {
                 bChasing = true;
                 OnChase();
+                OnChaseDyn.Broadcast();
             }
             MoveToward(Player->GetActorLocation(), DeltaTime);
             return;
@@ -80,6 +83,7 @@ void UTestEnemyPatrolComponent::TickComponent(float DeltaTime, ELevelTick TickTy
     {
         bChasing = false;
         OnPatrol();
+        OnPatrolDyn.Broadcast();
         PickPatrolTarget();
     }
     if (FVector::Dist(Here, PatrolTarget) <= 50.f)

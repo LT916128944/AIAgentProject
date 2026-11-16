@@ -1,0 +1,23 @@
+{
+  "criterion_id": "patrol-presentation",
+  "blueprint": "BP_TestEnemy",
+  "parent_class": "ATestEnemy",
+  "component": "UTestEnemyPatrolComponent",
+  "events": [
+    {
+      "name": "OnPatrol",
+      "pin": "白色执行引脚",
+      "phenomenon": "StartPatrol 之后进入巡逻。这里不写追击或伤害。"
+    },
+    {
+      "name": "OnChase",
+      "pin": "白色执行引脚",
+      "phenomenon": "bEnableChase 为真且玩家进入 DetectRadius 后追击。"
+    },
+    {
+      "name": "OnMeleeAttack",
+      "pin": "白色执行引脚",
+      "phenomenon": "距离进入 AttackRange 后 MeleeAttackCount 增加，间隔不短于 AttackInterval。这个事件不造成伤害，不播动画。"
+    }
+  ]
+}

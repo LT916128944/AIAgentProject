@@ -19,6 +19,12 @@ if not exist "%ROOT%\agent\chat.py" (
 
 cd /d "%ROOT%"
 
+rem 菜单 2 与 3 共用 plan_windows。整句才走规则；盖不住且 UE_SOLVER_ENABLED 开着进求解扇，否则停在缺口。
+rem 菜单 3 才占 UE_RAG_STDIN（改名为 .consumed）。有活心跳时菜单 2 和 3 都退出，退出码 2。
+rem 要越过活 run，启动时带 --force（start.bat 3 --force）。保存/PIE：菜单缺省开，DSH 只认 session_task.json。
+set "FORCE_ARG="
+if /I "%~2"=="--force" set "FORCE_ARG=--force"
+
 if not "%~1"=="" (
   set "CHOICE=%~1"
   goto dispatch
@@ -27,10 +33,10 @@ if not "%~1"=="" (
 :menu
 echo.
 echo  UE-RAG
-echo  1  普通对话     检索后回答。不改工程，不编译
-echo  2  单循环       一句话拆成步骤，每步同一张图
-echo  3  多窗口       规划者拆窗口，每扇单独跑一张图，最后集成
-echo  4  续接 run     续接最近一个没跑完的多窗口 run
+echo  1  普通对话     chat.py，只检索，不改工程
+echo  2  单循环       run_multi.py，与菜单 3 共用拆句，每步同一张图
+echo  3  多窗口       run_windows.py，整句命中规则；盖不住则求解或停在缺口
+echo  4  续接         最近一个没跑完的多窗口 run
 echo  0  退出
 echo.
 set /p CHOICE=选择: 
@@ -55,23 +61,33 @@ if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :loop
+call :warn_live_runs
+if errorlevel 2 exit /b 2
+if errorlevel 1 exit /b 1
 if defined UE_RAG_STDIN (
   set "PYTHONIOENCODING=utf-8"
-  "%PY%" "%ROOT%\agent\run_multi.py" < "%UE_RAG_STDIN%"
+  "%PY%" "%ROOT%\agent\run_multi.py" %FORCE_ARG% < "%UE_RAG_STDIN%"
 ) else (
-  "%PY%" "%ROOT%\agent\run_multi.py"
+  "%PY%" "%ROOT%\agent\run_multi.py" %FORCE_ARG%
 )
 if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
 :multi
 call :warn_live_runs
+if errorlevel 2 exit /b 2
 if errorlevel 1 exit /b 1
 if not defined UE_RAG_STDIN goto multi_interactive
 if not exist "%UE_RAG_STDIN%" (
   if exist "%UE_RAG_STDIN%.consumed" (
-    echo 输入已被另一个进程占用
-    exit /b 1
+    "%PY%" -c "from agent.run_guard import claim_stdin; import os,sys; raise SystemExit(0 if claim_stdin(os.environ.get('UE_RAG_STDIN',''))=='ok' else 1)"
+    if errorlevel 1 (
+      echo 输入已被另一个进程占用
+      exit /b 1
+    )
+    for %%F in ("%UE_RAG_STDIN%") do set "UE_RAG_STDIN=%%~dpF%%~nxF.consumed"
+    set "UE_RAG_STDIN_CLAIMED=1"
+    goto multi_redirect
   )
   echo 找不到输入文件: %UE_RAG_STDIN%
   exit /b 1
@@ -84,12 +100,13 @@ if errorlevel 1 (
 )
 for %%F in ("%UE_RAG_STDIN%") do set "UE_RAG_STDIN=%%~dpF%%~nxF.consumed"
 set "UE_RAG_STDIN_CLAIMED=1"
+:multi_redirect
 set "PYTHONIOENCODING=utf-8"
-"%PY%" "%ROOT%\agent\run_windows.py" --plain < "%UE_RAG_STDIN%"
+"%PY%" "%ROOT%\agent\run_windows.py" --plain %FORCE_ARG% < "%UE_RAG_STDIN%"
 exit /b %ERRORLEVEL%
 
 :multi_interactive
-"%PY%" "%ROOT%\agent\run_windows.py"
+"%PY%" "%ROOT%\agent\run_windows.py" %FORCE_ARG%
 if not "%~1"=="" exit /b %ERRORLEVEL%
 goto menu
 
@@ -104,11 +121,8 @@ endlocal
 exit /b 0
 
 :warn_live_runs
+if /I "%~2"=="--force" exit /b 0
 "%PY%" -c "from agent.run_guard import warn_live_runs; raise SystemExit(warn_live_runs())"
-if not errorlevel 2 goto warn_ok
-echo 有仍在心跳的 run。继续可能和它抢同一句需求。输入 Y 放行，其他键退出。
-set /p GO=放行?
-if /I "%GO%"=="Y" goto warn_ok
-exit /b 1
-:warn_ok
+if errorlevel 2 exit /b 2
+if errorlevel 1 exit /b 1
 exit /b 0

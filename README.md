@@ -34,7 +34,7 @@ AIWork\
 ## 准备
 
 1. 安装 UE 5.8，打开 `AIAgentProject.uproject`。一次运行只连一个编辑器 MCP。本仓库 `.env.example` 正在用的是 `UE_EDITOR_BACKEND=monolith`，地址 `http://127.0.0.1:9316/mcp`，这时关掉官方 Unreal MCP 插件。改回 `official` 时反过来：开 `http://127.0.0.1:8000/mcp`，关掉 Monolith。两边同时在听，启动会被拒绝。
-2. 按 [ue-rag 的 README](https://github.com/LT916128944/ue-rag) 准备 Python 3.12 虚拟环境、依赖和 `.env`。至少填 `DEEPSEEK_API_KEY`。密钥不要提交。复制 `.env.example` 得到的是这台机器正在用的值：模型 `deepseek-flash`，蓝图 / 材质 / UMG / 动画 / Niagara / AI / Monolith 写开关都开，保存和 PIE 的缺省也开。键没写时，代码缺省仍是 `official`、`deepseek-chat`、图开关关闭。
+2. 按 [ue-rag 的 README](https://github.com/LT916128944/ue-rag) 准备 Python 3.12 虚拟环境、依赖和 `.env`。换机可以直接跑 `RAG/ue-rag/shortcuts/setup.ps1`：找到 Python 3.12，建 `.venv`，装依赖；`.env` 没有才从 `.env.example` 复制。至少填 `DEEPSEEK_API_KEY`。密钥不要提交。复制 `.env.example` 得到的是这台机器正在用的值：模型 `deepseek-flash`，蓝图 / 材质 / UMG / 动画 / Niagara / AI / Monolith 写开关都开，保存和 PIE 开，求解开关 `UE_SOLVER_ENABLED=true`（`.env.example` 里这一行是未注释的 `true`，写的就是这台机器的值，不是代码缺省）。键没写时，代码缺省仍是 `official`、`deepseek-chat`、图开关关闭、求解关闭。保存和 PIE 的代码缺省是开。装完后跑 `python eval/check_all.py`、`shortcuts/ingest.bat`，再双击本仓库的 `start.bat`。不下载 UE。
 3. 第一次使用前的入库、工具索引和四条入口的差别，按 [`WORKFLOW.md`](WORKFLOW.md) 的「拉取之后先准备」。
 
 准备好之后双击 `start.bat`：
@@ -42,31 +42,34 @@ AIWork\
 | 选项 | 行为 |
 | --- | --- |
 | 1 普通对话 | 检索后回答。不改工程，不编译 |
-| 2 单循环 | 一句话拆成步骤，每步走同一张图 |
-| 3 多窗口 | 分层规划后分扇执行，再集成 |
+| 2 单循环 | `run_multi.py`。与菜单 3 共用拆句，每步走同一张图。不占重定向输入 |
+| 3 多窗口 | `run_windows.py`。整句才命中规则；盖不住则求解或停在缺口，然后分扇执行 |
 | 4 续接 | 续接最近一个没跑完的多窗口 run |
 
 菜单 2 和菜单 3 共用 `plan_windows`。写场景之后是否保存、玩法验收是否进 PIE，跟随 `UE_DEFAULT_SAVE` / `UE_DEFAULT_PIE`（缺省都开）。任务里显式写 `save: false` / `pie: false` 才关。
 
 ## 现在做到哪
 
-完成与否看 [`RAG/ue-rag/data/harness/feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json)，不看模型正文。当前仍 pending 的三条：
+完成与否看 [`RAG/ue-rag/data/harness/feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json)，不看模型正文。当前仍 pending 的两条：
 
-- `patrol-presentation`：行为树、动画、受击三个 `BlueprintImplementableEvent` 仍由人绑。`.env` 里 `UE_ALLOW_AI=true` 不把这条改成 passed。
-- `editor-transaction`：没有编辑器自己的 Transaction / Undo，属性回滚靠快照。
-- `level-assembly-persist`：整句平台跳跃还不能标成功。金币、平台、门、进度中枢已在 `L_NewTest`，HUD 由 C++ `UPlatformHUDWidget` 驱动；`umg-hud-exec` 与 `level-assembly` 在清单里已是 done。
+- `patrol-presentation`：C++ 状态机和 `AIAgent.Enemy.Patrol` 自动化已经通过。行为树不再建。`OnPatrol` / `OnChase` / `OnMeleeAttack` 的表现接线仍由人绑，步骤清单是 [`Plan/patrol-presentation.json`](Plan/patrol-presentation.json)。`.env` 里 `UE_ALLOW_AI=true` 不把这条改成 passed，人签文件也不改 `feature_list.json` 里这条的 `passed`。
+- `editor-transaction`：没有编辑器自己的 Transaction / Undo。失败时按快照做补偿（方式是 `compensating`），不代替 Undo。这条仍是 pending。
 
-检索、改 C++、编译、读错误、再改、再测这条窄闭环可以对固定任务做编译和断言。目标句「一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人」的表现半边仍由人在编辑器里绑。
+`level-assembly-persist` 已是 done（`data/runs/20261027/20261027-191740.md`）。整句在 monolith 下放置、五条内容条款各绑自己的扇、关卡已保存。已放进关卡的实例要读或改属性时，拆句转入 unresolved，不进执行窗口。
 
-细节以 [`WORKFLOW.md`](WORKFLOW.md) 开头的「当前系统」为准，不要用 [`周计划.md`](周计划.md) 第 4.3 节那张开工时的缺口表判断当前仓库。
+合同假通过的那一种形状（窗口全败、条款被「编辑器已打开」翻绿）由 `eval/check_criteria_binding.py` 钉住。翻牌带判词 `evidence_sha1`，回放时改一个 summary 字节就回到 false。整句收尾是 `ok` / `partial` / `failed`（退出码 0 / 3 / 1）；未签 `manual` 不是 `ok`。退出码 2 仍是有活心跳。动作在两条后端上怎么跑，由 `eval/check_backend_coverage.py` 声明：除 `judge_pickup`、`set_pickable` 因读不到实例属性而标 `partial` 外，清单里的动作是 `both`。monolith 下这两条在拆句转入 unresolved；官方后端仍可进窗口。写前快照是补偿回滚，同一幂等键只做一次，旧值冲突或逆操作失败时写 `manual_intervention` 并停。
+
+检索、改 C++、编译、读错误、再改、再测这条窄闭环可以对固定任务做编译和断言。目标句「一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人」的表现接线仍由人在编辑器里绑；C++ 行为本身已经在跑。
+
+细节以 [`WORKFLOW.md`](WORKFLOW.md) 开头的「当前系统」为准，不要用 [`周计划.md`](周计划.md) 第 4.3 节那张开工时的缺口表判断当前仓库。分数以 `RAG/ue-rag/eval/check_scorecard.py` 打印的为准，写在 `data/harness/scorecard.json`。没有人签、基准档案没跑满时，对应维度停在现状分。
 
 ## 工作流怎么用
 
 一句话结论：
 
 - **编辑器一次只走一个后端**。本机 `.env.example` 是 Monolith（9316）。Cursor 在 `monolith` 时读 `ue-monolith-backend-skill`，用 discover / describe / exec；`official` 时才扫描官方工具。选错入口就停。
-- **闭环仍是 `start.bat` 菜单 2/3**。DSH 是外壳：9 个 `mcp__uerag__*` 会转到当前锁定的后端，但不跑 LangGraph。改工程和编译回到 `run_windows.py`。
-- **句子到窗口**仍是 L0 手写规则或已学技能 → L1 理解器 → L2 归地 → L3 回写。只读诊断句另由 `agent/diagnose.py` 归到唯一的 Automation 过滤器，收成已有的 `run_automation_test`，不往动作表加行。
+- **闭环仍是 `start.bat` 菜单 2/3**。两菜单共用 `plan_windows`。菜单的保存和 PIE 缺省开；DSH 是外壳，写操作只认人写的 `session_task.json`，文件没有就拒绝。9 个 `mcp__uerag__*` 会转到当前锁定的后端，但不跑 LangGraph。改工程和编译回到 `run_windows.py`。DSH 和菜单 2/3 的编辑器写共用 `core/editor_lock.py` 那一把锁。
+- **句子到窗口**仍是 L0 手写规则或已学技能 → L1 理解器 → L2 归地 → L3 回写。门只认整句（2026-11-11 起）：规则 / 已学技能接不住的半句交回模型，不跟整句一起被领走；理解器 goals 盖不住时不再叫规划者重点一遍动作表——求解开着进求解兜底，关着停在缺口。只读诊断句另由 `agent/diagnose.py` 归到唯一的 Automation 过滤器，收成已有的 `run_automation_test`，不往动作表加行。
 - **蓝图在 Monolith 下同一目标最多 3 次**。第 3 次仍失败就停，不改连 8000。写开关关掉时次数是 0，步骤写入 `Plan/`。
 
 ### 先选入口
@@ -75,7 +78,7 @@ AIWork\
 | --- | --- | --- |
 | 固定句式的窄任务（编译工程、编译一张蓝图、移动 Actor、拾取裁决、放 Actor） | `start.bat` 菜单 2/3 | L0 命中 0 次；弱命中 1 次理解器 |
 | 新需求，要拆句、要改 C++、要摆场景 | `start.bat` 菜单 3（`run_windows.py`），先出任务书人审 | 1 次理解器 + 每扇图内 plan 若干次 |
-| 表外需求（动作表没有对应动作，如改射速/改常量） | 同菜单 3：理解器/规划者接不住时自动补一扇受控求解扇（`UE_SOLVER_ENABLED=true`，本机已开）；求解扇走「源码定位 → patch 改已有文件 → 编译 → automation 收口」，方案没给过滤器就再补选一次真测试名。台账 `done` 要有改动证据。`UE_RAG_STDIN` 一份输入只会被一个进程消费 | 1 次理解器 + solve 扇 ≤6 次模型 |
+| 表外需求（动作表没有对应动作，如改射速/改常量） | 同菜单 3：理解器 goals 盖不住整句时直接进求解兜底，不再叫规划者重点一遍动作表。代码缺省 `UE_SOLVER_ENABLED=false`，本机 `.env.example` 为 true。方案预演（只读）里有写 C++ 或改关卡先出任务书人审一次，任务书引用这份方案。求解扇走「盘点 → 源码定位 → 步骤规格 → 编译回灌 → automation 收口」，方案没给过滤器就再补选一次真测试名。台账 `done` 要有改动证据。菜单 3 的 `UE_RAG_STDIN` 在打开前改名为 `.consumed`，第二个人读不到；有活心跳时退出码 2，`start.bat 3 --force` 才继续并写下 `forced_by` | 1 次理解器 + solve 扇 ≤6 次模型 |
 | 只读研究、方案对比、报错定位（不改工程） | DeepSeek Harness（DSH）里的 `search_project` / `workflow` | 检索 0 次；研究模板 5 个子代理 |
 | 单步编辑器操作 | 看 `UE_EDITOR_BACKEND`。`monolith` 用 `scripts/monolith_backend.py`；`official` 用扫描脚本。DSH 里仍是原来的 3 个编辑器工具，内部转到当前后端 | 每步 ≥1 次 |
 | 续接没跑完的多窗口 run | `start.bat` 菜单 4 | 只跑没完成的扇 |
@@ -92,7 +95,7 @@ AIWork\
 4. **落盘任务书/计划**：需求会改工程时，按 `ue-cpp-plan-skill` 写 `Plan/YYYYMMDD-HHMMSS-<名字>.md` 或 `.cursor/memory/plans/`，等人确认。
 5. **执行**：确认后回终端跑 `start.bat` 菜单 3。写编辑器或编译串行，只读裁决并行。窄任务走菜单 2。
 6. **要证据**：`read_contract(run_id)` 看条款，再对未过且非 `manual` 的条款调 `verify(run_id, criterion_id)`。只有返回 `{ok:true, kind}` 的条款才算完成。
-7. **人工部分**：行为树、动画、受击、仍标成 `manual` 的委托由人在编辑器里绑，步骤写进 `Plan/`。
+7. **人工部分**：`OnPatrol` / `OnChase` / `OnMeleeAttack` 和仍标成 `manual` 的条款由人在编辑器里绑，步骤清单是 `Plan/patrol-presentation.json`。翻牌只认人写的 `data/attestations/<criterion_id>.json`，模型文本不把 `manual` 改成 passed。
 8. **收尾**：多扇任务写交接 JSON，用 `python agent/dsh_cli.py handoff-validate` 和 `handoff-merge`。改了 C++ 或关卡再补当天 `.cursor/memory/任务记录/`。
 
 ### DSH 接上了什么
@@ -107,11 +110,11 @@ AIWork\
 
 结构没变：L0 命中是 0 次模型调用；只读检索是 0 次；新需求要过理解器，再按扇跑图内 `plan`。合计数字以 [`scoreboard.json`](../RAG/ue-rag/data/harness/scoreboard.json) 里现有的那一版为准：26 个任务、24 个 ok、每个成功任务约 126k prompt tokens。这份文件之后没有新的合计写进去。DSH 与菜单 2 的对照在 [`dsh_ab.json`](../RAG/ue-rag/data/harness/dsh_ab.json)，DSH 侧仍是 null，不能据此说 DSH 更省。
 
-固定句式和窄任务可以压在理解器加一轮 `plan`。任意新需求会按扇叠加。表现条款里的 `manual` 仍要人绑。
+固定句式和窄任务可以压在理解器加一轮 `plan`。任意新需求会按扇叠加。表现条款里的 `manual` 仍要人绑；没签时整句是 `partial`，不是 `ok`。
 
 ### 红线
 
-- 模型文本不改 `passed`；`manual` 条款只由人在 `Plan/` 里绑。
+- 模型文本不改 `passed`。`manual` 由人在编辑器里绑，步骤在 `Plan/`；翻牌只认人写的 `data/attestations/<criterion_id>.json`。`feature_list.json` 的 `passed` 不由人签函数改写。
 - 一次运行只连 `UE_EDITOR_BACKEND` 选定的那个端口。选错入口就停。
 - 不用 DSH 的 read/write 直接改 `.uasset` / `.umap` / `Source/`。UE 写只经 `mcp__uerag__*` 网关。
 - DSH 会话不写 `allow_writes`、不写 `save` / `pie`、不写 `.env`。

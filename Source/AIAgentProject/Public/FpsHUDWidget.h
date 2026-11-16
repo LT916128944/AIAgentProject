@@ -70,6 +70,9 @@ protected:
 	TObjectPtr<UTextBlock> txt_Grenade;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FPS|HUD", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> txt_RocketAmmo;
+
+	UPROPERTY(BlueprintReadOnly, Category = "FPS|HUD", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> txt_VehicleName;
 
 	UPROPERTY(BlueprintReadOnly, Category = "FPS|HUD", meta = (BindWidgetOptional))

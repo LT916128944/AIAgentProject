@@ -42,6 +42,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FPS")
 	float ThrowUpBias = 300.f;
 
+	// 火箭筒弹匣：一共三发，打空就停火。HUD 读 GetRocketAmmo / GetRocketAmmoText
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FPS|Rocket")
+	int32 RocketAmmo = 3;
+
+	// 弹匣容量，只用于 UI 显示 "x/3"，不参与扣数
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FPS|Rocket")
+	int32 RocketMagazineSize = 3;
+
+	// 爆炸对范围内目标的伤害（血量口径 0..1，满血 1）
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FPS|Rocket")
+	float RocketDamage = 0.5f;
+
+	// 爆炸半径，600uu = 6 米
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FPS|Rocket")
+	float RocketBlastRadius = 600.f;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FPS")
 	int32 HitCount = 0;
 
@@ -72,6 +88,22 @@ public:
 	// 拾取物加库存的唯一入口
 	UFUNCTION(BlueprintCallable, Category = "FPS")
 	void AddGrenades(int32 Count);
+
+	// 发射火箭弹：三发弹匣，没弹药就不动；扣数在能真的打出去之后
+	UFUNCTION(BlueprintCallable, Category = "FPS|Rocket")
+	void FireRocket();
+
+	/** 剩余火箭弹，HUD 数字/进度条都绑这个。 */
+	UFUNCTION(BlueprintPure, Category = "FPS|Rocket")
+	int32 GetRocketAmmo() const;
+
+	/** 弹匣容量（默认 3）。 */
+	UFUNCTION(BlueprintPure, Category = "FPS|Rocket")
+	int32 GetRocketMagazineSize() const;
+
+	/** HUD 可直接绑的文本："火箭弹 2/3"。格式留在 C++，WBP 不用再拼。 */
+	UFUNCTION(BlueprintPure, Category = "FPS|Rocket")
+	FText GetRocketAmmoText() const;
 
 	// 按 E 找 400uu 内最近未占用载具上车；载具上再按 E 下车（切回本 Pawn）
 	UFUNCTION(BlueprintCallable, Category = "FPS")
@@ -121,4 +153,7 @@ protected:
 	bool bHudClassMissing = false;
 
 	static constexpr float TraceRange = 10000.f;
+
+	// 屏幕文本的固定 key：GEngine 按 key 覆盖，不会每帧堆一条。
+	static constexpr int32 RocketHudKey = 0x524F43;
 };

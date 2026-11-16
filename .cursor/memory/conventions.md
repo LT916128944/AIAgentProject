@@ -46,3 +46,4 @@
 - 后台/超时方式调 start.bat 的调用方要 kill 整棵 cmd 进程树：残留的 cmd 会拿着旧 stdin 文件在 REPL 里自己起新 run（20261028-192951 孤儿 run：静默改了源码、编了译，没写 run md 没归档——无主写入者比失败更危险，证据链断在半空）。
 - 离线检查的「不连编辑器/不依赖 .env」必须用代码钉住：eval/_pin_offline.close_now() 进程级封闭（本机 .env 开关不渗进断言），走 exec_editor_tool 的断言一律配假 exec_tool；agent 里裸 `load_dotenv()` 是禁手（按 CWD 自己找 .env，会把封闭打穿），统一 `load_dotenv(config.ENV_PATH, override=True)`。
 - solver（agent/solver.py）的诚实口径三条底线：改需求的句子方案里必须有交付性改动（patch/apply_spec/写原语；开关卡/保存/编译/观察不算，见 _SOLVER_INFRA_ACTIONS）；有写码步骤必须真编译（build_rounds>0）；automation 收口绿只对纯只读任务算完成。参数形状不靠猜：describe 校准（_calibrate_args）。
+- `BlueprintImplementableEvent` 只能由声明它的类自己实现：事件声明在组件上时，挂该组件的 Actor 蓝图接不到。要 Actor 蓝图能接就给组件补 `UPROPERTY(BlueprintAssignable)` 动态多播委托（`Dyn` 后缀区分），蓝图侧走 `K2Node_AddDelegate`（`Bind Event to XxxDyn`），组件内事件调用点后补 `XxxDyn.Broadcast()`。这与 `override_parent_function` 无关——它只覆写**父类**的可覆写函数。新增 `DECLARE_DYNAMIC_MULTICAST_DELEGATE` 必须关编辑器全量重建。

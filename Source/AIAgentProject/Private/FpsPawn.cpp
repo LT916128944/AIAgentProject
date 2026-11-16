@@ -3,11 +3,16 @@
 #include "Blueprint/UserWidget.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "UObject/ConstructorHelpers.h"
 #include "FpsBullet.h"
 #include "FpsGrenadeProjectile.h"
 #include "FpsHealthComponent.h"
 #include "FpsTarget.h"
 #include "SimpleVehicleTest.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/Engine.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 
@@ -31,6 +36,14 @@ AFpsPawn::AFpsPawn()
 	ViewCamera->SetupAttachment(Collision);
 	ViewCamera->SetRelativeLocation(FVector(0.f, 0.f, 64.f));
 	ViewCamera->bUsePawnControlRotation = true;
+	UStaticMeshComponent* Launcher = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RocketLauncher"));
+	Launcher->SetupAttachment(ViewCamera);
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Barrel(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	if (Barrel.Succeeded()) { Launcher->SetStaticMesh(Barrel.Object); }
+	Launcher->SetRelativeLocation(FVector(70.f, 28.f, -22.f));
+	Launcher->SetRelativeRotation(FRotator(90.f, 0.f, 0.f));
+	Launcher->SetRelativeScale3D(FVector(0.1f, 0.1f, 0.9f));
+	Launcher->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	// 血量真源：复用靶子那只 UFpsHealthComponent，口径 0..1（默认 1 = 满血）。
 	// 本任务只做「有真值可读」，不挂扣血触发；HUD 侧负责乘成 0..100 显示。
@@ -113,6 +126,11 @@ void AFpsPawn::Tick(float DeltaSeconds)
 	const float Forward = FMath::Clamp(AxisForward + (AxisW - AxisS), -1.f, 1.f);
 	const float Right = FMath::Clamp(AxisRight + (AxisD - AxisA), -1.f, 1.f);
 	ApplyLocalMove(Forward, Right, DeltaSeconds);
+	// 火箭筒弹药上屏。固定 key 覆盖同一条，不刷屏；没被玩家占有时不画。
+	if (GEngine && IsPlayerControlled())
+	{
+		GEngine->AddOnScreenDebugMessage(RocketHudKey, 0.f, FColor::Orange, GetRocketAmmoText().ToString());
+	}
 }
 
 void AFpsPawn::ApplyLocalMove(float Forward, float Right, float DeltaSeconds)
@@ -178,6 +196,74 @@ void AFpsPawn::Fire()
 	{
 		Target->ReactToHit();
 	}
+}
+
+void AFpsPawn::FireRocket()
+{
+	// 没弹药就不动：和手榴弹同一口径，扣数放在真能打出去之后
+	if (RocketAmmo <= 0)
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	if (!World || !ViewCamera)
+	{
+		return;
+	}
+	const FVector Start = ViewCamera->GetComponentLocation();
+	const FVector Forward = ViewCamera->GetForwardVector();
+	const FVector End = Start + Forward * TraceRange;
+	FCollisionQueryParams QueryParams(TEXT("FpsRocket"), false, this);
+	QueryParams.AddIgnoredActor(this);
+	FHitResult Hit;
+	const bool bHit = World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, QueryParams) && Hit.GetActor();
+	const FVector Impact = (bHit && Hit.bBlockingHit) ? FVector(Hit.ImpactPoint) : (Start + Forward * TraceRange);
+	// 走到这里就一定消耗一发：三发打空后上面直接早退
+	RocketAmmo -= 1;
+	const FVector Muzzle = Start + Forward * FMath::Min(60.f, FVector::Dist(Start, Impact));
+	ShowBullet(Muzzle, Impact);
+	// 爆炸圈只是视觉提示，真值在下面的半径伤害里
+	DrawDebugSphere(World, Impact, RocketBlastRadius, 16, FColor::Orange, false, 1.5f);
+
+	// 半径伤害：命中点周围按距离线性衰减。不依赖 TakeDamage，
+	// UFpsHealthComponent 才是血量真源，靶子那套照用。
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		AActor* Victim = *It;
+		if (!Victim || Victim == this)
+		{
+			continue;
+		}
+		UFpsHealthComponent* VictimHealth = Victim->FindComponentByClass<UFpsHealthComponent>();
+		if (!VictimHealth)
+		{
+			continue;
+		}
+		const float Dist = FVector::Dist(Victim->GetActorLocation(), Impact);
+		if (Dist > RocketBlastRadius)
+		{
+			continue;
+		}
+		const float Falloff = 1.f - FMath::Clamp(Dist / FMath::Max(RocketBlastRadius, 1.f), 0.f, 1.f);
+		VictimHealth->ApplyDamage(RocketDamage * Falloff);
+		HitCount += 1;
+	}
+}
+
+int32 AFpsPawn::GetRocketAmmo() const
+{
+	// UI 只显示 0..容量，负数和超额都不外泄
+	return FMath::Clamp(RocketAmmo, 0, FMath::Max(RocketMagazineSize, 0));
+}
+
+int32 AFpsPawn::GetRocketMagazineSize() const
+{
+	return FMath::Max(RocketMagazineSize, 0);
+}
+
+FText AFpsPawn::GetRocketAmmoText() const
+{
+	return FText::FromString(FString::Printf(TEXT("火箭弹 %d/%d"), GetRocketAmmo(), GetRocketMagazineSize()));
 }
 
 void AFpsPawn::ThrowGrenade()
@@ -275,6 +361,8 @@ void AFpsPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 		return;
 	}
 	PlayerInputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &AFpsPawn::Fire);
+	// 火箭筒键 T。左键仍是步枪，两边各自扣自己的弹药
+	PlayerInputComponent->BindKey(EKeys::T, IE_Pressed, this, &AFpsPawn::FireRocket);
 	// 投掷键 G。BindKey 只有 4 参成员函数指针重载，不接受 lambda（已钉约定）
 	PlayerInputComponent->BindKey(EKeys::G, IE_Pressed, this, &AFpsPawn::ThrowGrenade);
 	// 上车键 E。载具侧也有 E（下车），双方不同时持输入，不会双触发
