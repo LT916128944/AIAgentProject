@@ -37,17 +37,17 @@
 - **条款绑定**：`eval/check_criteria_binding.py`。20261027-180955 的形状（四扇 `place_batch` 全败）下，内容条款保持 false。`launch_editor` 的 synthetic 判词只翻「证明窗口恰好只有它自己」的条款，翻不动放置条款。翻成 passed 时写下判词 `evidence_sha1`（只含 `ok`、`kind`、`window`、`summary`）；回放时印章对不上，条款回到 false。整句收尾是 `ok` / `partial` / `failed`，写进 run 记录的 `sentence`：有执行窗口失败而条款全过是 `failed`（退出码 1）；有未签 `manual` 是 `partial`（退出码 3）；非 manual 全过、没有失败窗口、没有未签 manual 才是 `ok`（退出码 0）。退出码 2 仍是有活心跳，不是 `partial`。模型文本不改 `passed`。`manual` 只由人写的 `data/attestations/<criterion_id>.json` 翻牌（`criterion_id`、`person`、`signed_at`、`evidence_path`、证据文件字节的 `evidence_sha1` 都要在，哈希不符保持 false）；`editor_assert` 等条款拒绝人签。
 - **动作 × 后端**：`eval/check_backend_coverage.py` 的 `COVERAGE`，对照 `core/monolith_bridge.py` 的 `MAPPED` / `UNSUPPORTED`。`place_batch`、`set_scalar_param`、`remove_batch`、`move_actor`、`open_level`、`implement_shooter`、`implement_grenade`、`create_level`、`create_widget_blueprint`、`edit_widget_blueprint` 都是 `both`。`partial` 只剩 `judge_pickup` 和 `set_pickable`：monolith 没有 `get_properties` / `set_properties`，这两行原因文字保持原样，也不编进 `MAPPED`。当前后端是 monolith 时，依赖这两条原语的窗口在拆句末尾丢掉，对应半句留在 `unresolved`，并在当次 `Plan/` 写一行：先清实例再放置，或改走官方后端。官方后端这两条仍可进窗口。`place_batch` 生成时写 props 的路径保留。映射外的原语带原因拒绝，不再是笼统的 `UE_EDITOR_BACKEND=monolith`。
 - **写前回滚**：`agent/prop_snapshot.py`，检查 `eval/check_write_rollback.py`。scalar 覆写前记旧值；`place_batch` 新建的 Actor 按名登记，失败时删掉唯一实例；同一实例登记两次只删一次；名字对上不是恰好一个就不删。每条快照带动作、目标 ref、逆操作、幂等键，方式是 `compensating`。同一幂等键只回滚一次。同一 ref 旧值不一致则都不做，写 `manual_intervention`。五类确定故障：写属性中途失败写回旧值；编译失败不消费快照；保存失败把关卡差异留在快照目录；逆操作连接失败写 `manual_intervention` 并不再做下一条；run 被 `sweep_orphan_runs` 改判 orphaned 后，续接先按快照逆序恢复，恢复失败则停。这是补偿，不代替 Undo。`editor-transaction` 仍是 pending。
-- **入口占用**：菜单 3 在打开重定向输入之前把 `UE_RAG_STDIN` 改名为 `.consumed`，改名失败就退出。`agent/run_guard.py` 做同一次占位；30 分钟无心跳的 `running` 改判 `orphaned`，不杀进程。有活心跳时菜单 2 和菜单 3 退出码 2，打印 `run_id`，不写事件。`start.bat 3 --force`（菜单 2 同样带 `--force`）才继续，并在被越过的 run 的事件里写 `run_start.forced_by`（本进程 pid 和该 `run_id`）。原文件不在、只剩 `.consumed`、且没有未过期心跳时，这次调用可以接着用它。菜单 2 不改名。
+- **入口占用**：多窗口在打开重定向输入之前把 `UE_RAG_STDIN` 改名为 `.consumed`，改名失败就退出。`agent/run_guard.py` 做同一次占位；30 分钟无心跳的 `running` 改判 `orphaned`，不杀进程。有活心跳时单循环和多窗口退出码 2，打印 `run_id`，不写事件。带 `--force`（两种模式都认）才继续，并在被越过的 run 的事件里写 `run_start.forced_by`（本进程 pid 和该 `run_id`）。原文件不在、只剩 `.consumed`、且没有未过期心跳时，这次调用可以接着用它。单循环不改名。
 - **两套写策略**：菜单的 `save` / `pie` 走 `config.run_policy("menu")`，`task_policy` 是它的薄包装，缺省 true，任务写了 `save: false` / `pie: false` 或 `--no-save` / `--no-pie` 才关。DSH 走 `config.run_policy("dsh")`，只读人写的 `data/dsh/session_task.json`，文件没有就拒绝写。两套剖面的 bool 不必相等。图写（蓝图、材质、UMG、动画、Niagara）由 `core/graph_write_policy.py` 一处判定。编辑器写锁在 `core/editor_lock.py`，锁文件仍是 `data/locks/editor.lock`。DSH 和菜单 2/3 的写共用这一把，官方后端和 monolith 互相挡住：并发一个成功一个 busy，失败文本带持有者 pid、backend、`run_id`；900 秒无心跳或伪造 pid 算过期；只读不占锁（`eval/check_dsh_lock.py`）。
 - **求解开关**：代码缺省 false（环境变量没写就是关）。本仓库 `.env.example` 写成 true，表示这台机器开着。两句都对，说的不是同一个字段。
 
 ### 入口
 
-`start.bat` 四条：1 `chat.py`，2 `run_multi.py`，3 `run_windows.py`，4 `--resume latest`。菜单 2 和 3 共用 `plan_windows`，一张 LangGraph。DSH 仍是外壳，不跑这张图；写策略只读人写的 `data/dsh/session_task.json`。动作表的单一声明源是 `agent/actions.py`（清单不再抄在这里），`integrate_verify` 与 `dispose_residual` 只由代码追加。`apply_spec` 写完源码强制编译（`agent/build_error.py`），错误原文进下一轮，编译轮次 ≤3，执行面每次真编译都落 `data/last_cpp_build.json`。
+入口是 `RAG/ue-rag/server/static/entry.html`（由同仓库 `server/entry.py` 在 127.0.0.1:8011 提供；双击 `AIAgentProject\start.bat` 一步起服务并开页）：模式「普通对话」跑 `chat.py`、「单循环」跑 `run_multi.py`、「多窗口」跑 `run_windows.py`，「续接最近」走多窗口的 `--resume latest`。单循环和多窗口共用 `plan_windows`，一张 LangGraph。DSH 仍是外壳，不跑这张图；写策略只读人写的 `data/dsh/session_task.json`。动作表的单一声明源是 `agent/actions.py`（清单不再抄在这里），`integrate_verify` 与 `dispose_residual` 只由代码追加。`apply_spec` 写完源码强制编译（`agent/build_error.py`），错误原文进下一轮，编译轮次 ≤3，执行面每次真编译都落 `data/last_cpp_build.json`。
 
 ### 门只认整句（2026-11-11 起）
 
-拆句顺序不变：L0 手写规则 → FPS HUD 规则 → 已学句式 → L1 理解器。变的是门的口径。`rules` / `hud-rules` / `learned` 命中前都要整句盖得住：有半句对不上这条路径声明的动作就返回空，交回后面的模型——不把整句领走后让半句蒸发（纯 FPS HUD 整句仍是 `hud-rules` 五扇链零模型；「加血条子弹，同时加滑铲」这类混句不再被它领走）。闸门落点不同：`rules` 经 `_rules_cover` 过 `_clauses_accounted`，`learned` 自己过一次；`hud-rules` 例外——它的分支直接 `return`，不在 `plan_windows` 里过闸门，hud-rules 靠自身整句匹配：`_clauses_accounted` 在 `agent/fps_hud.py` 的 `hud_windows` 里，认不住整句就返回空、交回 L1/求解。这条直接 `return` 是有意的，不要给 hud-rules 补闸门。L1 的 goals 盖不住原句（`unresolved` 非空，或半句没人接）时，不再叫规划者重点一遍动作表，也不拿残缺 goals 直接执行：`UE_SOLVER_ENABLED` 开着就进求解兜底（`plan_windows` 标 `solver-fallback`），关着停在缺口、`unresolved` 进任务书等人表态。人审留一次：求解方案预演（只读）里有写 C++ 或改关卡才出任务书，任务书引用这份方案，不再要求生成器用动作表重写一遍。`run_windows._needs_brief` 只对「窗口已经盖住整句」的确定性来源跳过人审门。
+拆句顺序不变：L0 手写规则 → FPS HUD 规则 → 已学句式 → L1 理解器。变的是门的口径。`rules` / `hud-rules` / `learned` 命中前都要整句盖得住：有半句对不上这条路径声明的动作就返回空，交回后面的模型——不把整句领走后让半句蒸发（纯 FPS HUD 整句仍是 `hud-rules` 五扇链零模型；「加血条子弹，同时加滑铲」这类混句不再被它领走）。闸门落点不同：`rules` 经 `_rules_cover` 过 `_clauses_accounted`，`learned` 自己过一次；`hud-rules` 例外——它的分支直接 `return`，不在 `plan_windows` 里过闸门，hud-rules 靠自身整句匹配：`_clauses_accounted` 在 `agent/fps_hud.py` 的 `hud_windows` 里，认不住整句就返回空、交回 L1/求解。这条直接 `return` 是有意的，不要给 hud-rules 补闸门。纯路径半句（HTML 入口层追加的「。参考资产：/Game/UI/WBP_HUD」「。参考文件：Public/FpsPawn.h」「。参考文档：documents/…」）由 `plan_windows._is_reference_clause` 认成 `constraint` 而不是新需求：只认这三种形状，多带一个字就不算。不加这条的话，拖一个源码附件就会让原本强命中的规则链掉进理解器（实测 `编译工程` 是 `rules`，加一句 `。参考文件：Public/FpsPawn.h` 变成 `planner`），落点也跟着漂——`eval/check_entry_paths.py` 按 5 个样本钉住「带/不带附件 source 与扇数一致」。L1 的 goals 盖不住原句（`unresolved` 非空，或半句没人接）时，不再叫规划者重点一遍动作表，也不拿残缺 goals 直接执行：`UE_SOLVER_ENABLED` 开着就进求解兜底（`plan_windows` 标 `solver-fallback`），关着停在缺口、`unresolved` 进任务书等人表态。人审留一次：求解方案预演（只读）里有写 C++ 或改关卡才出任务书，任务书引用这份方案，不再要求生成器用动作表重写一遍。`run_windows._needs_brief` 只对「窗口已经盖住整句」的确定性来源跳过人审门。
 
 ### 求解扇预算
 
@@ -63,7 +63,7 @@
 
 `/api/health` 在 `ok`、`model`、`mcp_url`、`mcp_up` 之外还有 `backend`、`index_present`、`circuit_closed`、`checkpoint_writable`、`disk_free_mb`。后五项各带 `ok` 和 `reason`。不调用模型，不往编辑器写。`mcp_up` 仍是原来的探活。
 
-换机用 `RAG/ue-rag/shortcuts/setup.ps1`：找到 Python 3.12，建 `.venv`，装依赖。`.env` 没有才从 `.env.example` 复制，已有则不动。脚本不自己跑那几条收尾命令，只在末尾打印并列出下一步清单：`python eval/check_all.py`、`shortcuts/ingest.bat`、`AIAgentProject/start.bat`，由人按顺序跑。不下载 UE。
+换机用 `RAG/ue-rag/shortcuts/setup.ps1`：找到 Python 3.12，建 `.venv`，装依赖。`.env` 没有才从 `.env.example` 复制，已有则不动。脚本不自己跑那几条收尾命令，只在末尾打印并列出下一步清单：`python eval/check_all.py`、`shortcuts/ingest.bat`、`python server/entry.py --port 8011`（然后浏览器开 `http://127.0.0.1:8011`），由人按顺序跑。不下载 UE。
 
 成本按 `caller` 分列。没有行的入口不填 0。`caller=dsh` 仍是没有行就省略那一节。`promote_from_route` 的 `source_run` 为空时停在 shadow，不进已提升路由。
 
@@ -77,11 +77,11 @@
 
 Cursor 里按 `AGENTS.md` 说话的那条还在。人确认 `.cursor/memory/plans/` 之后，可以用 `run_task.py --query` 把改、编译、测试交给闭环。未确认不调用。这不是菜单 3，菜单 3 也不会变成 Cursor 里每句话的默认动作。
 
-不想开 Cursor 时，双击工程根目录的 `start.bat`。四条选项共用同一份检索库和同一个编辑器执行器。`run_agent.py` 还在磁盘上，菜单不再调用它。
+不想开 Cursor 时，起 `python server/entry.py --port 8011`——服务会自己打开浏览器，人只做这一个动作（`--no-open` 关掉自动打开；端口上已有实例时不再抢端口，直接开页面）。三种模式共用同一份检索库和同一个编辑器执行器。`run_agent.py` 还在磁盘上，入口页不再调用它。
 
 | | 普通对话 | 单循环 | 多窗口 |
 | --- | --- | --- | --- |
-| 入口 | `start.bat` 选 1，或 `python agent/chat.py` | `start.bat` 选 2，或 `python agent/run_multi.py` | `start.bat` 选 3，或 `python agent/run_windows.py`。默认带终端面板，`--plain` 纯文本；菜单 4 直接续接最近一个没跑完的 run，REPL 里 `:resume latest`（或 `:resume <run_id>`）同效 |
+| 入口 | 页面模式「普通对话」，或 `python agent/chat.py` | 页面模式「单循环」，或 `python agent/run_multi.py` | 页面模式「多窗口」，或 `python agent/run_windows.py`。页面起的子进程走 `--plain` 纯文本；「续接最近」直接续接最近一个没跑完的 run，REPL 里 `:resume latest`（或 `:resume <run_id>`）同效 |
 | 谁规划 | 检索一次后直接回答 | 菜单 2 与菜单 3 共用 `plan_windows`。口径以「当前系统」的「门只认整句」为准：规则、HUD 链、已学句式先看是否盖住整句，盖不住就交回模型。离线检查仍调用 `plan_sequence()`，那条不叫模型 | 同左。L1 的 goals 盖不住原句时不再叫规划者重写一遍：求解开着进求解扇，关着停在缺口。归地、任务书人审、表外动作只记候选，仍按「当前系统」那一节 |
 | 改工程 | 不改 | 不再每步输入 `y`。做不了或失败时暂停，可以补一次路径 | 每扇新的 `thread_id`。消息是这一扇的任务句；有上一扇交接文件时，前面再附一份短 JSON（`unmet`、证据种类、`next`），不附工具正文。写编辑器或 `cpp_build` 的窗口过编辑器闸门串行，只读裁决和只读契约动作并行 |
 | 验证 | 不编译 | 和以前的多 Agent 相同。模型不能自己宣布成功 | 集成不叫模型。某一扇失败只重试这一扇。任务书确认后代码追加 `integrate_verify` 跑矩阵验收 |
@@ -196,7 +196,7 @@ plan_sequence 手写规则
 
 台账 `data/ledger.json` 只给机器读：范围级 `done / partial / pending`，由集成结果回写，任务书生成器的「尚未完成的全部主要内容」从这里取。给人的记录仍在 `.cursor/memory/任务记录/`，两边不互相替代。估算只是记录字段，代码自动带免责三行，执行层不读、不作为预算、超时不杀窗口。
 
-REPL 里 `:quit` 退出，`E` 展开上一个 run 的每扇明细（状态、ok、elapsed、retries），`:resume latest`（或 `:resume <run_id>`）续接——误敲成 `--resume ...` 或裸写 `resume latest` 也按续接处理，别的 `--xxx` 只提示不执行，不再当任务句进规划者（2026-10-14 185550、190429 两次白烧规划者调用后补的）。`start.bat` 菜单 4 直接续接最近的 run。续接时面板读得到上一扇的 `unmet`；交接文件被删掉也不影响 checkpoint。`eval/check_routes.py` 现在同时跑 `eval/check_upgrade.py`：离线覆盖六段（事件流与机读状态、面板渲染、任务书与人审门、续接与快照还原、环/悬空诊断、只读并行、工件、矩阵台账归档）加 build 前打转熔断与 REPL 指令，通过时打印 `upgrade ok` 和 `routes ok`，不叫真实模型、不写场景。蒸馏契约在 `eval/check_distill.py`，通过时打印 `distill ok`。Harness 字段、合同、交接、上下文、回放、只读动作和属性快照在 `eval/check_harness.py`，通过时打印 `harness ok`。`python agent/distill.py --dry-run` 只统计候选，不叫模型。`UE_DISTILL_TEACHER=1` 且不是 dry-run 时，才用现有 `UE_LLM_MODEL` 把候选收成技能 JSON，追加进 `data/distill/candidates.jsonl`，不写 `learned_skills.json`。巡逻敌人的蓝图步骤写在 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`，不自动绑图。
+REPL 里 `:quit` 退出，`E` 展开上一个 run 的每扇明细（状态、ok、elapsed、retries），`:resume latest`（或 `:resume <run_id>`）续接——误敲成 `--resume ...` 或裸写 `resume latest` 也按续接处理，别的 `--xxx` 只提示不执行，不再当任务句进规划者（2026-10-14 185550、190429 两次白烧规划者调用后补的）。入口页「续接最近」直接续接最近的 run。续接时面板读得到上一扇的 `unmet`；交接文件被删掉也不影响 checkpoint。`eval/check_routes.py` 现在同时跑 `eval/check_upgrade.py`：离线覆盖六段（事件流与机读状态、面板渲染、任务书与人审门、续接与快照还原、环/悬空诊断、只读并行、工件、矩阵台账归档）加 build 前打转熔断与 REPL 指令，通过时打印 `upgrade ok` 和 `routes ok`，不叫真实模型、不写场景。蒸馏契约在 `eval/check_distill.py`，通过时打印 `distill ok`。Harness 字段、合同、交接、上下文、回放、只读动作和属性快照在 `eval/check_harness.py`，通过时打印 `harness ok`。`python agent/distill.py --dry-run` 只统计候选，不叫模型。`UE_DISTILL_TEACHER=1` 且不是 dry-run 时，才用现有 `UE_LLM_MODEL` 把候选收成技能 JSON，追加进 `data/distill/candidates.jsonl`，不写 `learned_skills.json`。巡逻敌人的蓝图步骤写在 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`，不自动绑图。
 
 ## 分工
 
@@ -223,9 +223,9 @@ Cursor 外壳另有一条 `beforeShellExecution` hook：`.cursor/hooks.json` 调
 ## 框架
 
 ```text
-start.bat ─┬─ 普通对话 chat.py ─ retrieve ─ 回答
-           ├─ 单循环 run_multi.py ─ plan_windows（与菜单 3 同一条）─ 每步同一张图
-           └─ 多窗口 run_windows.py ─ 规划者/任务书/快路径 ─ 每扇 run_task（只读并行过编辑器闸门）
+server/static/entry.html ─┬─ 普通对话 chat.py ─ retrieve ─ 回答
+                            ├─ 单循环 run_multi.py ─ plan_windows（与多窗口同一条）─ 每步同一张图
+                            └─ 多窗口 run_windows.py ─ 规划者/任务书/快路径 ─ 每扇 run_task（只读并行过编辑器闸门）
                                           board.py 面板 · brief.py 任务书+人审门 · ledger.py 台账
                                           harness.py 合同/交接/停因 · prop_snapshot.py 属性快照
                                                             │
@@ -264,6 +264,7 @@ start.bat ─┬─ 普通对话 chat.py ─ retrieve ─ 回答
 | 图 | `agent/graph.py`、`agent/nodes.py`、`agent/roles.py` | 节点和边不变。`plan` 按任务种类换提示和工具。trace 记 `role` |
 | 监督者 | `agent/supervise.py`、`agent/plan_windows.py`、`agent/catalog.py`、`agent/intent.py`、`agent/understand.py`、`agent/grounding.py`、`agent/diagnose.py`、`agent/sequence.py`、`agent/skill_memory.py`、`agent/failure_memory.py`、`agent/clarify_policy.py`、`agent/distill.py`、`agent/harness.py`、`agent/roles.py`、`agent/garden.py`、`agent/resume_context.py` | L0 手写规则（每步都落地才算强命中）先拆，然后已提升技能，再然后 learned_routes。弱命中/未命中过 L1 理解器（动作卡片 + 原句 + 3 条检索标题，1KB 上下），意图经 `validate_intent` 验收后 L2 归地：asset 槽位 `link_asset` 索引命中直连并看索引是否过期、类可推自动插创建前置扇、推不出问一次 `r`。只读诊断句在补窗前由 `diagnose.py` 收成唯一过滤器的 `run_automation_test`。L1 失败才叫老规划者（看不到工具原文），重试上限 1 次。整句集成成功、unresolved 为空、并且回放没有变差，才提升技能（提升必须带 `source_run`，空值停在 shadow；提升写 `source_runs` 数组和 `content_sha1`）。`fix` 先查 `failure_patterns.json`，症状对不上再用 `ue_error`。蒸馏读 run、event、trace 和 `data/archive` 的哈希与矩阵结论，失败样本保留 `error Cxxxx`。默认不叫教师模型。任务可带 `harness_role`：`research` / `review` 只读，写工具一律拒（`allow_writes` 里写了也拒）；`plan` 只返回窗口清单；没写时行为与原来完全一致，仍是同一张图。`garden.py` 只扫文档抬头、记 stale，`resume_context.py` 开工读档。`sequence.repair_blueprint` 在 monolith 下对蓝图类动作最多 3 次 |
 | 网关 | `server/gateway.py` | 127.0.0.1:8010 上四个路由：`/api/health` 返回模型名和 MCP 是否可连；`/api/chat` 一次补全；`/api/structured` 包理解器；`/api/tool-call` 只转发契约里的六个工具。不拆窗口，不跑 LangGraph |
+| 入口层 | `server/entry.py`、`server/prompt_builder.py`、`server/static/entry.html`、`agent/ui_ask.py` | 127.0.0.1:8011 的 HTML 入口（`python server/entry.py --port 8011`；`AIAgentProject\start.bat` 双击一步起）。**读**：`/api/runs`、`/api/run/<id>`、`/api/stream/<id>`（tail `data/events/*.jsonl`，`id:` 是行号、认 `Last-Event-ID`）、`/api/tree?path=`（只列一层）、`/api/health`、`/api/questions/<id>`（只从事件流读「现在在等哪些表态」）。**写**只有三个文件：`data/ui/req/<ts>.txt`（`POST /api/run` 写一行需求 → `subprocess` 起对应模式的 agent 脚本（多窗口带 `--plain --force`））、`data/ui/inbox/<run_id>.jsonl`（`POST /api/answer` 一行一条裁决）、`data/ui/logs/<ts>.log`（子进程的人类可读日志）。装配预览 `POST /api/preview` 仍是**纯函数**。`prompt_builder.build()` 六条规则（原句一字不动 / 附件各成一句 `。参考X：token` / 全篇 `/Game` 最多一条 / 源码与文档只收相对路径 / 外部文件不进 prompt）由 `eval/check_entry_paths.py` 钉住。`agent/ui_ask.py` 是决策通道：`question` 事件发在拿答案**之前**、按钮文案与 `_pause_hint` 同源、收件箱按 `run_id`+`question_id` 双键「领取即改名」（`os.replace`）、**缺行不许当成自动 skip**（等不到就按停止收口）——`eval/check_entry_questions.py` 与 `eval/check_entry_drive.py` 钉住。这一层只 import `config/core/server`，不 import `agent`；`run_windows --ui-inbox` 与 `run_multi --ui-inbox` 由 `entry.py` 透传 `UE_RAG_UI_INBOX` |
 | 任务 | `agent/task_schema.py`、`agent/run_task.py`、`agent/run_windows.py`、`agent/board.py`、`agent/brief.py`、`agent/ledger.py` | `--task` 跑固定 JSON。`--query` 仍是单循环。菜单 3 每扇一个新 `thread_id`（续接的中断扇用回原 id）。退出码 0/1/130。面板、任务书、事件流、机读 run 状态、快照、矩阵、台账都在这条线 |
 | 评测 | `eval/run_eval.py`、`eval/report.py`、`eval/check_routes.py`、`eval/check_info_layer.py`、`eval/check_architecture.py`、`eval/check_schema.py`、`eval/check_risk.py`、`eval/check_automation.py`、`eval/check_scene_gate.py` | 默认仍是三条任务。`report.py` 按任务合计 token，没有 usage 就留空；对目录再写 P50/P95 和一页 HTML，并把记分板（tasks / ok / first_pass / prompt_tokens_per_ok / tool_refused）写进 `data/harness/scoreboard.json`。`check_routes.py` 检查图的边，也检查四个 HTTP 路由。`check_scene_gate.py` 钉住场景内容闸门：句子里点名的金币/平台/门必须补出 `place_batch` 与 `editor_assert`。trace 在 `data/traces/`，已 gitignore |
 
@@ -392,7 +393,7 @@ E:\UEProject\AIWork\
 │   ├── .codex\              技能正文、Codex 短文与钩子
 │   ├── .agents\skills\      Codex 技能发现目录，联接到 .codex\skills
 │   ├── documents\           功能设计。导出后以 ue_doc 进入检索
-│   ├── start.bat            四条入口：对话、单循环、多窗口、续接
+│   ├── start.bat            唯一入口：双击起 server/entry.py（8011），服务自己开浏览器
 │   └── Source\              C++。本地 diff 只能改 AIAgentProject 这一棵
 └── RAG\ue-rag\
     ├── config.py            路径和超时的唯一缺省
@@ -403,7 +404,7 @@ E:\UEProject\AIWork\
     ├── eval\                任务、run_eval.py、report.py、离线检查
     ├── pipelines\           导出与入库
     ├── scripts\             官方扫描、单次调用、monolith_backend.py
-    ├── server\              检索 MCP、六工具契约、DSH 网关、四个 HTTP 路由（8010，不跑图）
+    ├── server\              检索 MCP、六工具契约、DSH 网关、四个 HTTP 路由（8010，不跑图）、HTML 入口层（8011，投影 + 装配预览 + 请求文件/收件箱驱动）
     └── data\                JSONL、技能卡片、Chroma、traces、costs.jsonl、harness\（feature_list、progress、risk_matrix、arch_whitelist、scoreboard、garden_report、circuit）
 ```
 
@@ -572,6 +573,7 @@ python eval/understand_probe.py
 python eval/model_compare.py
 python eval/report.py data/traces
 python server/gateway.py
+python server/entry.py --port 8011   # 会自己打开浏览器；--no-open 关掉
 ```
 
 `report.py` 的列是 id、ok、retry、tools、elapsed、`prompt_tokens`、`completion_tokens`。token 按任务把每行里有的数加起来。没有 usage 就印空白，不估算，也不填 0。最后一行是 `tasks=` 和 `ok` 为 true 的个数。接着按失败行打分类计数：编译、测试、工具拒绝、MCP 连不上、超过重试、关卡预检、其他。trace 里已有 `failure_class` 时以这个枚举为准，没有字段的旧行仍按原文归类。对不上就进「其他」。参数如果是 `data/traces` 目录，每个 jsonl 一行：文件名、任务数、`ok` 数、两类 token 合计，然后再打一份合计分类，以及耗时 P50/P95、平均 token、重试合计。路由计数只读 `data/events` 里的 `run_start`：`rules` 和 `learned` 算 L0 直接归地，`understood` 是理解器，`planner` 是老规划者。同时在 `eval/reports/` 写一页静态 HTML，打开就是这些数。交接目录或 trace 里真有归因条目时，这一页多一节：id、簇 key、label、截短的 note；没有条目就不写这一节。缓存命中率只有 trace 里真有缓存字段时才填。不算钱，不另起采集服务。`observe` 行带 `judge_kind` 和截短的错误原文，分类靠这两项。`check_routes.py` 通过时打印 `routes ok`，退出码 0。它覆盖「编译失败或 `editor_assert` 失败回到 `fix`」（编译已过的 Automation 残差不进 `fix`，见上面的裁判），也覆盖 C++ 换行导出、快照标记、角色上下文、hook 拒绝、分类，以及四个 HTTP 路由和表外工具拒绝。`check_routes.py` 末尾会再跑 `check_upgrade.py`。九条离线检查一起通过时打印 `routes ok`、`upgrade ok`、`distill ok`、`harness ok`、`info ok`、`architecture ok`、`schema ok`、`risk ok`、`automation ok`（后五条是 2026-10-20 三轮升级加的，也进了 `.github/workflows/offline.yml`）。不要为了制造失败去改游戏源码。
