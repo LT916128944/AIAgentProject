@@ -2,7 +2,7 @@
 
 > **开工协议**：开工先在 `RAG/ue-rag`（用该目录 `.venv`）跑 `python agent/resume_context.py`，它打印 [`progress.json`](../RAG/ue-rag/data/harness/progress.json) 的 goal / phase / next_action、[`feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json) 里第一条 `pending`（`passed` 只由裁判或离线检查改写，不认模型宣布）和最新一份交接的 `unmet`，不超过 200 字；进程概览见 [`documents/harness/overview.md`](documents/harness/overview.md)。本文按标题只读需要的那一节。和后文沿革冲突时，以「当前系统」和 `feature_list.json` 为准。
 
-## 当前系统（2026-11-11）
+## 当前系统（2026-11-17）
 
 ### 一次运行只连一个编辑器
 
@@ -25,7 +25,7 @@
 
 `feature_list.json` 里仍是 pending 的两条：
 
-- `patrol-presentation`：`ATestEnemy` 的巡逻、追击、近战是 C++ 状态机。`AIAgent.Enemy.Patrol` 在 monolith 上已有自动化证据（1 passed / 0 failed）。行为树已被这套状态机取代，不另建。`OnPatrol` / `OnChase` / `OnMeleeAttack` 的表现接线仍由人绑：monolith 词表没有覆写组件 `BlueprintImplementableEvent` 的节点。无骨架的 Actor 不做动画，受击表现等伤害链路。打开 `UE_ALLOW_AI` 不把这条改成 passed。步骤清单是 [`Plan/patrol-presentation.json`](Plan/patrol-presentation.json)（`BP_TestEnemy` 的 `OnPatrol` / `OnChase` / `OnMeleeAttack`、白色执行引脚、人要核的现象）；长说明仍是 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`。人签文件不改 `feature_list.json` 里这条的 `passed`。
+- `patrol-presentation`：C++ 状态机（`TickPatrol` / `TickChase` / `TickAttack`）与 `AIAgent.Enemy.Patrol` 自动化已绿（1 passed / 0 failed），不建行为树。2026-10-27 那条「monolith 词表缺覆写节点」的归因**已作废**：真因是 `BlueprintImplementableEvent` 只能由声明它的类自身实现——事件声明在 `UTestEnemyPatrolComponent` 上，`BP_TestEnemy`（父类 `ATestEnemy`）够不到。2026-11-12 已给组件补三个 `BlueprintAssignable` 多播委托（`OnPatrolDyn` / `OnChaseDyn` / `OnMeleeAttackDyn`）并在四处调用点补 `Broadcast`；`BP_TestEnemy` 的 EventGraph 已接 `AddDelegate` + `CustomEvent`，`get_execution_flow` 从 `BeginPlay` 可走到三个绑定节点，PIE 实测日志出现 patrol 表现行 13 次。**剩余：把这条跑出一条带 `evidence_sha1` 的 run 记录**（`bench_record` 只收 `passed=true` 且带印章的条款）；无骨架 Actor 不做动画，受击表现等伤害链路。打开 `UE_ALLOW_AI` 不把这条改成 passed。步骤清单仍留 [`Plan/patrol-presentation.json`](Plan/patrol-presentation.json)，长说明仍是 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`；人签文件不改 `feature_list.json` 里这条的 `passed`。
 - `editor-transaction`：没有编辑器自己的 Transaction / Undo。失败时写回的是快照，不是 Undo。
 
 `level-assembly-persist` 已是 done。证据 `data/runs/20261027/20261027-191740.md`：整句在 monolith 下从理解器跑到集成矩阵全过，五条 `editor_assert` 各绑自己的放置扇，关卡经 `list_dirty_packages` + `save_packages` 落盘。金币、平台、门、进度中枢在 `L_NewTest`，HUD 由 C++ `UPlatformHUDWidget` 驱动。已放进关卡的实例要读或改属性时，拆句转入 unresolved，不进执行窗口（见下节 partial）。
@@ -54,6 +54,29 @@
 `UE_SOLVER_ENABLED` 缺省 false，人开了才走。预算闸门缺省：编辑器 ≤8 次、元数据 ≤12 次、编译 ≤3 轮、模型 ≤6 次（`UE_SOLVER_*` 可调）；namespace 白名单缺省 `editor,mesh,niagara,blueprint,material`。烧完或闸门拒绝就降级回能力缺口，不假成功。内部守卫（`read_only_plan` / `write_skipped` / 参数形状校准 / 写闸预检）见 `agent/solver.py` 文件头，这里不复述。
 
 保存和 PIE：任务没写时跟随 `UE_DEFAULT_SAVE` / `UE_DEFAULT_PIE`，两边缺省都是 true；`--no-save` / `--no-pie` 才拒绝。要求关卡已存在的动作（`open_level`、`implement_shooter`、`implement_grenade`）认裸名昵称：裸名按尾号数字对现有关卡做唯一匹配（`level3` → `L_NewTest3`，带 `alias_note`），对上多个就暂停问全名；`create_level` 不做这个匹配。技能正文 24 份，在 `.codex/skills`。
+
+### 全域 Spec 内核（2026-11-17 边界升级）
+
+在现有拆句 / 求解之外补了一层「模型产 Spec → 脚本确定性执行 → 只读复核 → 回灌修复 → 沉淀」的通用流水线，覆盖九个域（UMG / 蓝图图 / 动画蓝图 / 材质 / Niagara / 动画&ControlRig / Sequencer / 后处理 / C++）。它不是新的业务图，也不改动作表：
+
+- **共享内核**：`agent/spec_pipeline.py`（断言求值、路径取值、有序 `build_domain`：validate→exec→verify→回灌≤2→终态、沉淀候选、写闸）与 `agent/spec_registry.py`（九域**惰性逐域导入**登记：`describe` / `all_hints` / `recognize` / `build`，单域写坏只让该域不可用、不连坐整表）。
+- **域内核**：`agent/{umg,graph,animgraph,material,niagara,animation,sequencer,postprocess,cpp}_spec.py`，统一接口 `KIND / JUDGE_KIND / SPEC_HINT / validate_spec / plan_ops / exec_op / verify_spec / recognize / build`。judge_kind 沿用既有证据种类、不新增：图 / UMG / 动画蓝图→`blueprint_compile`，材质 / Niagara / 动画 / Sequencer / 后处理→`editor_assert`，C++→`cpp_build`。模型只产 Spec；写只经内核 + 写闸 + 只读复核。
+- **工具单一事实源**：`agent/spec_toolmap.py`，用 `backends.monolith.discover` 对当前后端做**真机核实**——`data/harness/monolith_tool_inventory.json`（8 个命名空间、729 个动作，material 64 / niagara 129 / animation 201 / level_sequence 8 / blueprint 139 / ui 138 / editor 49 / reflect 1）。`spec_pipeline.default_call` 按命名空间路由：原生命名空间→`backends.monolith.exec`，其余→`exec_tool`（official/bridged）。`lookup(domain, op)` 指到真实 `namespace.action` 才是 verified，指不到的如实登记为缺口。
+- **诚实边界（不伪造工具）**：材质图连线、ControlRig rig 图、Niagara 系统模块栈、状态机转换接线走结构化 `unsupported` 暂停；真机核实另发现 `level_sequence` 命名空间**只有 8 个只读动作**，Sequencer 的 `AddBinding / AddTrack / Transform·CameraCut 轨道 / SetPlaybackRange` 无写原语（仅 `animation.create_sequence` + 骨骼轨道关键帧可用）。C++ 只验「编译过 + 符号存在」，逻辑正确性不可只读验。
+- **位置（地基，未接线）**：这一层是「兜住能力」的地基，**尚未接进多窗口动作表**——把某域提升成 CATALOG 动作、接 `plan_windows` 路由是后续一步（受证据种类按动作静态映射与写权限限制）。UMG 已用 additive 方式接入 `sequence.repair_blueprint`：`edit_widget_blueprint` 在 fps_hud 不接管、且窗口带 Spec 时走它，否则原路径零变化。
+- **守卫**：`eval/check_spec_pipeline.py`、`check_spec_toolmap.py`、`check_spec_boundary.py`、`check_{umg,graph,animgraph,material,niagara,animation,sequencer,postprocess,cpp}_spec.py`，全离线（不连编辑器、不调模型）；每只钉「好 Spec 零错 / 坏 Spec 被判 / kernel 确定性 / adapter 覆盖 / verifier 正反 / route 不误报 / 回灌有上限」。都已进 `.github/workflows/offline.yml`。计划与落地记录见 [`Plan/20261117-1610-UE5全域模型脚本边界总览.md`](Plan/20261117-1610-UE5全域模型脚本边界总览.md) 与 [`Plan/20261117-1630-全域边界升级-落地记录.md`](Plan/20261117-1630-全域边界升级-落地记录.md)。
+
+### 2026-11-17 其余收口（拆句 / 动作表 / 入口）
+
+在 Spec 内核之外，这一轮还把拆句、动作表和入口页的几处缺口收掉。全部有离线守卫、不连编辑器。
+
+- **连接词层**：`agent/connectives.py` + `data/skills/connectives.json`（人写词表）。拆句在标点之外把「然后 / 接着 / 随后 / 最后 / 之后 / 其次」（seq）、「并且 / 同时 / 以及 / 顺便 / 顺带」（parallel）等多字连接词当切点并剥掉；**只做「拆句 + 覆盖」，顺序依赖不自动串**（避免 steps 重排把因果接反）。词表缺失 / 坏 JSON → 退化成只按标点切，与旧行为逐字一致。`plan_windows._clause_rows` 用它切句、`_clause_accounted` 先剥连接词再判残句。`eval/check_connectives.py` 钉住。
+- **缺信息先问模型**：`agent/model_fill.py`。拆句 / 执行遇到缺路径 / 蓝图 / 源文件 / 过滤器要暂停前，先用模型补一个形状合法的值（源文件还要求磁盘上真存在）；补得出就当人敲了 `r <值>` 直接往下走，补不出 / 形状不合法 / 没模型 → 原样退回人工暂停，行为与改动前逐字一致。只补「缺信息」，不补「能力缺口」。`run_multi._decide_model_first`、`run_windows._decide_window_model_first` 接它。`eval/check_model_fill.py` 钉住（模型替身）。
+- **放灯 `place_light`**：`agent/actions.py` 新增动作（slots `light_type`：点光源 / 聚光灯 / 方向光 / 矩形光，缺省点光源）。按类生成原生 Actor（`/Script/Engine.PointLight` 等，走 monolith `editor.author_map_settings`），放完整 `mesh.get_scene_statistics` 复查该类 +1 再按窗口 save 落盘；不改源码、不放蓝图。整句「打开编辑器，在关卡世界原点添加一个点光源」由 `supervise._plan_rules` 确定性拆成 launch → open → place_light，零模型。配套三处：`launch_only` 不再吞掉放灯半句；`_is_cpp_edit` 不再把「加一个 + 场景名词（灯 / 模型 / 道具…）」当改 C++；路线图依赖里 `place_light` 接最近的 `launch/open/create_level`，`open/create_level` 接最近的 `launch_editor`（冷启动不再同轮派发 open_level 去连 MCP，路线图也不再并排不连）。`eval/check_place_light.py`、`check_cpp_edit_scene.py`、`check_roadmap_deps.py` 钉住。
+- **HUD 单读数**：「只加一条血条」这类只命中一类读数的请求，`agent/fps_hud.py` 的 `requested_hud_controls` 只落地它要的那几块（血条 → `txt_Health`，并配图形血条 `HealthBarBG` + `HealthBarFill` 底条 / 填充条 + 数值，不只放一个文本 '100'）；两类以上读数仍走整份七控件合同。支持「删除 / 移除…血条」先删后加或纯删。`_HUD_CLAUSE_RE` 认「上限 / 样式 / 设计 / 仿照 / 常见」等血条收尾半句，单读数请求不再掉进通用受控求解。`eval/check_hud_single_readout.py` 钉住。
+- **范围级条款进集成**：求解兜底 / 任务书物化把合同落在范围 `scope["criteria"]`，而 run 级 `state.data["criteria"]` 可能被 stitch 把「没有窗口能证明」的条款摘空。`run_windows._delivery_criteria` / `_all_criteria` 在 run 级、窗口级都空时回落范围级条款，避免「真做成了被记成假失败」；未过的范围条款仍判失败。`eval/check_integrate_scope_criteria.py` 钉住。
+- **入口「输入指令卡死」修复（20261116）**：①`btn-send` 的 click 不再裸挂 `send`（MouseEvent 恒为真被当 `resume`，点「发送」实际发的是 `:resume latest`），`send` 开头把 `resume` 收成严格布尔；②任务书人审的「确认」按钮答案是空串，`Channel.ask` 不再把空答案判成 `timeout`（收件箱缺行仍按 `timeout`）；③`_run_query` 在「规划 + 任务书人审」之前先落一条空壳 run（`_RunState` + `_EventBus` + `ui_ask.attach`），规划完成后 `execute_windows(pre_state=...)` 复用同一 `run_id` 填真窗口，不再一次输入落两条 run、页面也不会等 12 秒报「没等到新 run」。`eval/check_entry_send.py` / `check_entry_brief_confirm.py` / `check_entry_run_scaffold.py` 钉住。
+- **入口「像卡死」三件反馈（20261117）**：顶栏「用时 / 预估剩余」倒计时（`#g-eta`）、中央后台日志尾巴（`#logpanel` / `#logbody` + `GET /api/uilog/<run_id>`，左对齐轨迹，只读 `data/ui/logs/<ts>.log` 的尾巴、不解析成状态）、规划期右侧「规划中」占位卡（`renderPlanning` / `.plan-card`）；运行状态文案按后端日志推阶段（`derivePhase`）。`eval/check_entry_ui_feedback.py` 钉住（只读静态页）。
 
 ### 记分、健康与换机
 
@@ -87,7 +110,7 @@ Cursor 里按 `AGENTS.md` 说话的那条还在。人确认 `.cursor/memory/plan
 | 验证 | 不编译 | 和以前的多 Agent 相同。模型不能自己宣布成功 | 集成不叫模型。某一扇失败只重试这一扇。任务书确认后代码追加 `integrate_verify` 跑矩阵验收 |
 | 记录 | 不写 trace。人在 `s/c/r` 里选择时，往 `data/events/<同一次 run id>.jsonl` 追加 `confirm` | 每步写在 `data/runs/YYYYMMDD/`（按日期分目录，老 run 原平铺兼容读写）。图内部 trace 仍在 `data/traces/*.jsonl` | 同一目录，按窗口分节，带上依赖和 `{ok, summary}`。另有 `data/runs/YYYYMMDD/<run_id>.json` 机读状态、`data/events/<run_id>.jsonl` 事件流、`data/archive/<run_id>/` 归档 |
 
-目标仍是 [`周计划.md`](周计划.md) 第 2.1 节那句验收：一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人。检索、改 C++、编译、读错误、再改、再测由闭环做。C++ 半边已经是状态机：`UTestEnemyPatrolComponent` 和 `ATestEnemy` 绕出生点巡逻，发现玩家后追击，近距离调用 `OnMeleeAttack`。`AIAgent.Enemy.Patrol` 自动化已通过。行为树不再建。`OnPatrol` / `OnChase` / `OnMeleeAttack` 仍是 `BlueprintImplementableEvent`，表现接线由人绑，对应合同里的 `manual` 条款，模型文本改不了 `passed`。菜单开跑时代码可以追加一扇只读 `run_automation_test`，不因此把 `pie` 设成 true。自动条款过了、人工条款还在时，整句记「部分完成」。无骨架不做动画，受击表现等伤害链路。早期读数画面在 `RAG/ue-rag/eval/reports/demo-c-patrol-20261016-124807.mp4`。
+目标仍是 [`周计划.md`](周计划.md) 第 2.1 节那句验收：一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人。检索、改 C++、编译、读错误、再改、再测由闭环做。C++ 半边已经是状态机：`UTestEnemyPatrolComponent` 和 `ATestEnemy` 绕出生点巡逻，发现玩家后追击，近距离调用 `OnMeleeAttack`。`AIAgent.Enemy.Patrol` 自动化已通过。行为树不再建。`OnPatrol` / `OnChase` / `OnMeleeAttack` 已从 `BlueprintImplementableEvent` 改成组件上的 `BlueprintAssignable` 多播委托，`BP_TestEnemy` 的 EventGraph 已接 `AddDelegate` + `CustomEvent`；剩余是跑出一条带 `evidence_sha1` 的 run 记录，未签时仍按 `manual` 处理，模型文本改不了 `passed`。菜单开跑时代码可以追加一扇只读 `run_automation_test`，不因此把 `pie` 设成 true。自动条款过了、人工条款还在时，整句记「部分完成」。无骨架不做动画，受击表现等伤害链路。早期读数画面在 `RAG/ue-rag/eval/reports/demo-c-patrol-20261016-124807.mp4`。
 
 `chat.py` 的 `answer`、`nodes.py` 的 `plan_node`、`supervise.py` 的 `_from_model` 和理解器都经 `RAG/ue-rag/core/llm_call.py` 调用模型。模型名每次读 `UE_LLM_MODEL`。键缺失时是 `deepseek-chat`。本仓库 `.env.example` 写的是 `deepseek-flash`。供应商和 `base_url` 没有改。每次调用把模型名、耗时、prompt token、completion token、错误写进 `data/costs.jsonl`。响应里如果有 `prompt_cache_hit_tokens`、`prompt_cache_miss_tokens` 或 `cached_tokens`，一并写下；没有就空着，不估算。trace 里同一次 `plan` 也会带上这些字段。
 
@@ -643,9 +666,9 @@ python eval/check_dsh_bridge.py
 
 机器可读副本是 [`RAG/ue-rag/data/harness/feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json)，`status` 冲突时以 JSON 为准。
 
-这些挡在「任意一句话生成一个会巡逻的敌人」前面的，是表现接线，不是 C++ 半边，也不挡已经跑通的窄任务：
+这些挡在「任意一句话生成一个会巡逻的敌人」前面的，不是 C++ 半边，也不挡已经跑通的窄任务：
 
-- `patrol-presentation` 仍是第一条 pending。C++ 状态机已编译，`AIAgent.Enemy.Patrol` 自动化已通过。`OnPatrol` / `OnChase` / `OnMeleeAttack` 不自动连线。`.env.example` 里 `UE_ALLOW_AI` 已经是 true，这条仍不因此改成 passed。自动条款过了、人工条款还在，整句是「部分完成」。步骤仍在 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`
+- `patrol-presentation` 仍是第一条 pending。C++ 状态机已编译，`AIAgent.Enemy.Patrol` 自动化已通过。`OnPatrol` / `OnChase` / `OnMeleeAttack` 已从 `BlueprintImplementableEvent` 改成组件上的 `BlueprintAssignable` 多播委托、`BP_TestEnemy` 的 EventGraph 已接上，剩余是跑出一条带 `evidence_sha1` 的 run 记录。`.env.example` 里 `UE_ALLOW_AI` 已经是 true，这条仍不因此改成 passed。自动条款过了、人工条款还在，整句是「部分完成」。步骤记录见 `Plan/20261017-1507-巡逻敌人蓝图人工步骤.md`
 - `backend=monolith` 且对应写开关为 true 时，蓝图类动作最多试 3 次，不保证成功。第 3 次失败就停，不改连 8000。开关不是 true 时次数是 0，步骤写入 `Plan/`。表现接线的三个事件不在这 3 次里
 - 平台跳跃的 `material-domain`、`umg-domain`、`platform-automation`、`level-assembly`、`umg-hud-exec`、`level-assembly-persist` 在 `feature_list.json` 里已是 done。整句证据是 `data/runs/20261027/20261027-191740.md`。`check_platform_hud` 核对控件名和父类 `PlatformHUDWidget`。已存在实例的属性读写见下一条
 - 交叉编码器重排、换 Embedding、Docker。观测页是 `report.py` 从已有 trace 写出的静态 HTML，不是常驻网站。`data/harness/scoreboard.json` 当前是 26 个任务、24 个 ok、每个成功约 126k prompt tokens；DSH 对照列仍空
