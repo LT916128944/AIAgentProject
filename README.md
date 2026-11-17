@@ -31,6 +31,16 @@ AIWork\
 - `Plan/`：过程记录，不进入检索。
 - `start.bat`：本仓库唯一的入口——双击起入口页（起服务 + 服务自己开浏览器）。只做启动，不做菜单；三个模式在页面上选。页面本身在 `RAG/ue-rag/server/static/entry.html`。
 
+## 首次克隆后先构建（init）
+
+> 本仓库只提交源码和资源，**不含任何编译产物**：`Binaries/`、`Intermediate/` 已被 `.gitignore` 忽略——它们体积大、且与本机引擎/工具链强绑定，本就不该进 git。
+
+1. **环境**：UE **5.8**（`AIAgentProject.uproject` 的 `EngineAssociation` = 5.8）+ **Visual Studio 2022** 的「使用 C++ 的游戏开发」工作负载。
+2. **首次打开会重编插件**：用 UE5.8 打开 `AIAgentProject.uproject`，Monolith 没有对应引擎版本的二进制，编辑器会提示重建模块，点 **Yes** 即从源码编译（20 个模块，首次较慢）；之后正常打开不再重编，除非改了源码或换了引擎版本。
+3. **可选第三方插件缺了也能编**：`BlueprintAssist` / `BlueprintAttributes` / `ComboGraph` / `SMSystem` 等缺失不会报错——相关模块在 `Build.cs` 里做了探测，缺了就按 `WITH_* = 0` 降级（例：`WITH_COMBOGRAPH=0`），只是功能相应变少。
+4. **`Tools/` 下的 `monolith_proxy.exe` / `monolith_query.exe` 也被忽略**：只有走 MCP 的 proxy / 离线查询时才需要自己跑 `build.bat` 生成；编辑器内的 MCP server 是编进模块的，不影响启动。
+5. 上面只保证「拿到工程能编过」。Python 环境、`.env`、检索库和入库这些准备见下一节「准备」。
+
 ## 准备
 
 1. 安装 UE 5.8，打开 `AIAgentProject.uproject`。一次运行只连一个编辑器 MCP。本仓库 `.env.example` 正在用的是 `UE_EDITOR_BACKEND=monolith`，地址 `http://127.0.0.1:9316/mcp`，这时关掉官方 Unreal MCP 插件。改回 `official` 时反过来：开 `http://127.0.0.1:8000/mcp`，关掉 Monolith。两边同时在听，启动会被拒绝。
@@ -65,25 +75,6 @@ cd RAG\ue-rag
 | 普通对话 | `chat.py`。检索后回答，不改工程，不编译 |
 
 「续接最近」读最近一个没跑完的多窗口 run。三种模式共用 `plan_windows`。写场景之后是否保存、玩法验收是否进 PIE，跟随 `UE_DEFAULT_SAVE` / `UE_DEFAULT_PIE`（缺省都开）。任务里显式写 `save: false` / `pie: false` 才关。
-
-## 现在做到哪
-
-完成与否看 [`RAG/ue-rag/data/harness/feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json)，不看模型正文。当前仍 pending 的两条：
-
-- `patrol-presentation`：C++ 状态机（`TickPatrol` / `TickChase` / `TickAttack`）和 `AIAgent.Enemy.Patrol` 自动化已经通过，行为树不再建。2026-10-27 那条「monolith 词表缺覆写节点」的归因已作废：真因是 `BlueprintImplementableEvent` 只能由声明它的类自身实现（事件声明在 `UTestEnemyPatrolComponent`，`BP_TestEnemy` 够不到）。2026-11-12 已给组件加三个 `BlueprintAssignable` 多播委托并在调用点 `Broadcast`，`BP_TestEnemy` 的 EventGraph 已接 `AddDelegate` + `CustomEvent`，PIE 实测有 patrol 表现行。**剩余是把这条跑出一条带 `evidence_sha1` 的 run 记录**（`bench_record` 只收 `passed=true` 且带印章的条款）；步骤清单仍留 [`Plan/patrol-presentation.json`](Plan/patrol-presentation.json)。`.env` 里 `UE_ALLOW_AI=true` 不把这条改成 passed，人签文件也不改 `feature_list.json` 里这条的 `passed`。
-- `editor-transaction`：没有编辑器自己的 Transaction / Undo。失败时按快照做补偿（方式是 `compensating`），不代替 Undo。这条仍是 pending。
-
-`level-assembly-persist` 已是 done（`data/runs/20261027/20261027-191740.md`）。整句在 monolith 下放置、五条内容条款各绑自己的扇、关卡已保存。已放进关卡的实例要读或改属性时，拆句转入 unresolved，不进执行窗口。
-
-合同假通过的那一种形状（窗口全败、条款被「编辑器已打开」翻绿）由 `eval/check_criteria_binding.py` 钉住。翻牌带判词 `evidence_sha1`，回放时改一个 summary 字节就回到 false。整句收尾是 `ok` / `partial` / `failed`（退出码 0 / 3 / 1）；未签 `manual` 不是 `ok`。退出码 2 仍是有活心跳。动作在两条后端上怎么跑，由 `eval/check_backend_coverage.py` 声明：除 `judge_pickup`、`set_pickable` 因读不到实例属性而标 `partial` 外，清单里的动作是 `both`。monolith 下这两条在拆句转入 unresolved；官方后端仍可进窗口。写前快照是补偿回滚，同一幂等键只做一次，旧值冲突或逆操作失败时写 `manual_intervention` 并停。
-
-检索、改 C++、编译、读错误、再改、再测这条窄闭环可以对固定任务做编译和断言。目标句「一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人」的表现接线已在 `BP_TestEnemy` 的 EventGraph 用多播委托接上，剩余是跑出一条带 `evidence_sha1` 的 run 记录；C++ 行为本身已经在跑。
-
-另一层「全域 Spec 内核」的地基（2026-11-17 边界升级）：九域（UMG / 蓝图图 / 动画蓝图 / 材质 / Niagara / 动画&ControlRig / Sequencer / 后处理 / C++）各有 `agent/<域>_spec.py`，共用 `agent/spec_pipeline.py` 的「Spec→确定性执行→只读复核→回灌修复→沉淀」流水线与 `agent/spec_registry.py` 登记表；工具名用 `agent/spec_toolmap.py` 对当前 monolith 后端做**真机核实**（快照在 `RAG/ue-rag/data/harness/monolith_tool_inventory.json`）。今天算法侧做不到的子形态（材质图连线、ControlRig rig 图、Niagara 系统模块栈、Sequencer 的 Transform/CameraCut 轨道写入）走结构化暂停，不假成功。这层是「兜住能力」的地基，**尚未接进多窗口的动作表**（提升为 CATALOG 动作是后续一步）。细节见 [`../RAG/ue-rag/README.md`](../RAG/ue-rag/README.md) 的「全域 Spec 内核」与 [`Plan/20261117-1630-全域边界升级-落地记录.md`](Plan/20261117-1630-全域边界升级-落地记录.md)。
-
-同日（2026-11-17）还收了几处拆句 / 动作 / 入口的缺口：**连接词层**（`agent/connectives.py`，然后 / 并且… 零模型切句、不自动排依赖）、**缺信息先问模型**（`agent/model_fill.py`，补不出再问人）、**`place_light` 放灯**（新增动作，按类生成原生灯 Actor 并按场景统计 +1 复查）、**HUD 单读数**（只加一条血条也走真控件、配图形血条 `HealthBarBG`/`HealthBarFill`）、**路线图 `launch → open` 串行依赖**、**范围级条款进集成**，以及入口页「输入指令卡死 / 像卡死」修复（发送按钮接线、空答案确认、先落空壳 run、后台日志与预估倒计时）。这些都有离线守卫（`eval/check_{connectives,model_fill,place_light,cpp_edit_scene,roadmap_deps,hud_single_readout,integrate_scope_criteria,entry_send,entry_brief_confirm,entry_run_scaffold,entry_ui_feedback}.py`），细节见 [`WORKFLOW.md`](WORKFLOW.md) 的「2026-11-17 其余收口」与 [`../RAG/ue-rag/README.md`](../RAG/ue-rag/README.md)。
-
-细节以 [`WORKFLOW.md`](WORKFLOW.md) 开头的「当前系统」为准，不要用 [`周计划.md`](周计划.md) 第 4.3 节那张开工时的缺口表判断当前仓库。分数以 `RAG/ue-rag/eval/check_scorecard.py` 打印的为准，写在 `data/harness/scorecard.json`。没有人签、基准档案没跑满时，对应维度停在现状分。
 
 ## 工作流怎么用
 
@@ -165,3 +156,22 @@ python eval/check_dsh_bridge.py
 python eval/check_backend.py
 python eval/check_diagnose.py
 ```
+
+## 现在做到哪
+
+完成与否看 [`RAG/ue-rag/data/harness/feature_list.json`](../RAG/ue-rag/data/harness/feature_list.json)，不看模型正文。当前仍 pending 的两条：
+
+- `patrol-presentation`：C++ 状态机（`TickPatrol` / `TickChase` / `TickAttack`）和 `AIAgent.Enemy.Patrol` 自动化已经通过，行为树不再建。2026-10-27 那条「monolith 词表缺覆写节点」的归因已作废：真因是 `BlueprintImplementableEvent` 只能由声明它的类自身实现（事件声明在 `UTestEnemyPatrolComponent`，`BP_TestEnemy` 够不到）。2026-11-12 已给组件加三个 `BlueprintAssignable` 多播委托并在调用点 `Broadcast`，`BP_TestEnemy` 的 EventGraph 已接 `AddDelegate` + `CustomEvent`，PIE 实测有 patrol 表现行。**剩余是把这条跑出一条带 `evidence_sha1` 的 run 记录**（`bench_record` 只收 `passed=true` 且带印章的条款）；步骤清单仍留 [`Plan/patrol-presentation.json`](Plan/patrol-presentation.json)。`.env` 里 `UE_ALLOW_AI=true` 不把这条改成 passed，人签文件也不改 `feature_list.json` 里这条的 `passed`。
+- `editor-transaction`：没有编辑器自己的 Transaction / Undo。失败时按快照做补偿（方式是 `compensating`），不代替 Undo。这条仍是 pending。
+
+`level-assembly-persist` 已是 done（`data/runs/20261027/20261027-191740.md`）。整句在 monolith 下放置、五条内容条款各绑自己的扇、关卡已保存。已放进关卡的实例要读或改属性时，拆句转入 unresolved，不进执行窗口。
+
+合同假通过的那一种形状（窗口全败、条款被「编辑器已打开」翻绿）由 `eval/check_criteria_binding.py` 钉住。翻牌带判词 `evidence_sha1`，回放时改一个 summary 字节就回到 false。整句收尾是 `ok` / `partial` / `failed`（退出码 0 / 3 / 1）；未签 `manual` 不是 `ok`。退出码 2 仍是有活心跳。动作在两条后端上怎么跑，由 `eval/check_backend_coverage.py` 声明：除 `judge_pickup`、`set_pickable` 因读不到实例属性而标 `partial` 外，清单里的动作是 `both`。monolith 下这两条在拆句转入 unresolved；官方后端仍可进窗口。写前快照是补偿回滚，同一幂等键只做一次，旧值冲突或逆操作失败时写 `manual_intervention` 并停。
+
+检索、改 C++、编译、读错误、再改、再测这条窄闭环可以对固定任务做编译和断言。目标句「一句话生成会巡逻、发现玩家后追击、近距离攻击的敌人」的表现接线已在 `BP_TestEnemy` 的 EventGraph 用多播委托接上，剩余是跑出一条带 `evidence_sha1` 的 run 记录；C++ 行为本身已经在跑。
+
+另一层「全域 Spec 内核」的地基（2026-11-17 边界升级）：九域（UMG / 蓝图图 / 动画蓝图 / 材质 / Niagara / 动画&ControlRig / Sequencer / 后处理 / C++）各有 `agent/<域>_spec.py`，共用 `agent/spec_pipeline.py` 的「Spec→确定性执行→只读复核→回灌修复→沉淀」流水线与 `agent/spec_registry.py` 登记表；工具名用 `agent/spec_toolmap.py` 对当前 monolith 后端做**真机核实**（快照在 `RAG/ue-rag/data/harness/monolith_tool_inventory.json`）。今天算法侧做不到的子形态（材质图连线、ControlRig rig 图、Niagara 系统模块栈、Sequencer 的 Transform/CameraCut 轨道写入）走结构化暂停，不假成功。这层是「兜住能力」的地基，**尚未接进多窗口的动作表**（提升为 CATALOG 动作是后续一步）。细节见 [`../RAG/ue-rag/README.md`](../RAG/ue-rag/README.md) 的「全域 Spec 内核」与 [`Plan/20261117-1630-全域边界升级-落地记录.md`](Plan/20261117-1630-全域边界升级-落地记录.md)。
+
+同日（2026-11-17）还收了几处拆句 / 动作 / 入口的缺口：**连接词层**（`agent/connectives.py`，然后 / 并且… 零模型切句、不自动排依赖）、**缺信息先问模型**（`agent/model_fill.py`，补不出再问人）、**`place_light` 放灯**（新增动作，按类生成原生灯 Actor 并按场景统计 +1 复查）、**HUD 单读数**（只加一条血条也走真控件、配图形血条 `HealthBarBG`/`HealthBarFill`）、**路线图 `launch → open` 串行依赖**、**范围级条款进集成**，以及入口页「输入指令卡死 / 像卡死」修复（发送按钮接线、空答案确认、先落空壳 run、后台日志与预估倒计时）。这些都有离线守卫（`eval/check_{connectives,model_fill,place_light,cpp_edit_scene,roadmap_deps,hud_single_readout,integrate_scope_criteria,entry_send,entry_brief_confirm,entry_run_scaffold,entry_ui_feedback}.py`），细节见 [`WORKFLOW.md`](WORKFLOW.md) 的「2026-11-17 其余收口」与 [`../RAG/ue-rag/README.md`](../RAG/ue-rag/README.md)。
+
+细节以 [`WORKFLOW.md`](WORKFLOW.md) 开头的「当前系统」为准，不要用 [`周计划.md`](周计划.md) 第 4.3 节那张开工时的缺口表判断当前仓库。分数以 `RAG/ue-rag/eval/check_scorecard.py` 打印的为准，写在 `data/harness/scorecard.json`。没有人签、基准档案没跑满时，对应维度停在现状分。
